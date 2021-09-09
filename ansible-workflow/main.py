@@ -45,7 +45,7 @@ class AnsibleWorkflow():
         self.__graph.add_node('r', data=root_node)
         #self.__frontier.append(root_node)
         self._import_nodes(self._get_input(filename), [root_node,],  strategy='serial')
-        pos=nx.nx_agraph.graphviz_layout(self.__graph, prog="dot")
+        pos=nx.nx_agraph.graphviz_layout(self.__graph)
         nx.draw(self.__graph, pos=pos)
         nx.draw_networkx_labels(self.__graph, pos=pos)
         print("%s" % list(self.__graph))
@@ -67,13 +67,18 @@ class AnsibleWorkflow():
             
             # generate a node identifier
             gnode_id= inode.get('id',''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5)))
-            print("%s node: %s       parents: %s " % (indentation, gnode_id, [p.get_id() for p in parent_nodes]))
+            print("-->> %s node: %s       parents: %s       zero_outgree: %s" % (indentation, gnode_id, [p.get_id() for p in parent_nodes], [p.get_id() for p in  zero_outdegree_nodes]))
+            
             for parent_node in parent_nodes:
                 self.__graph.add_edge(parent_node.get_id(), gnode_id)
 
+
+
             if strategy == 'serial':
                 parent_nodes = []
-
+                for zero_outdegree_node in zero_outdegree_nodes:
+                    self.__graph.add_edge(zero_outdegree_node.get_id(), gnode_id)                
+                zero_outdegree_nodes = []
             # generate the object representing the graph
             if 'block' in inode:
                 gnode = BNode(gnode_id)
@@ -88,6 +93,8 @@ class AnsibleWorkflow():
             if 'block' not in inode:
                 if strategy == 'parallel' or (strategy == 'serial' and inode == to_be_imported[-1]):
                     zero_outdegree_nodes.append(gnode)
+            else:
+                zero_outdegree_nodes.extend(block_sub_nodes)
 
             # if the strategy is serial
             if strategy == 'serial':
@@ -97,13 +104,13 @@ class AnsibleWorkflow():
                 else:
                     # or add current node as the parent
                     parent_nodes = [gnode,]
-            
+            print("<<-- %s node: %s       parents: %s       zero_outgree: %s" % (indentation, gnode_id, [p.get_id() for p in parent_nodes], [p.get_id() for p in  zero_outdegree_nodes]))
         return zero_outdegree_nodes
 
 
 def main():
     aw = AnsibleWorkflow()
-    i = aw.import_file("../examples/input3.yml")
+    i = aw.import_file("../examples/input4.yml")
 
 
 if __name__ == "__main__":
