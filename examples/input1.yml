@@ -1,0 +1,9 @@
+---
+- id: 1
+  block:
+    - id: 1.1
+      import_playbook: test1.yml
+    - id: 1.2
+      import_playbook: test2.yml
+- id: 2
+  import_playbook: test3.yml
