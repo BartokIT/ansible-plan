@@ -1,6 +1,7 @@
 #!/bin/env python3
 import ansible_runner
 import networkx as nx
+from numpy import e
 import yaml
 import matplotlib.pyplot as plt
 import random 
@@ -24,22 +25,41 @@ class BNode(Node):
     pass
 
 class PNode(Node):
-    def __init__(self, id, playbook):
+    def __init__(self, id, playbook, inventory, extravars={}):
         super(PNode, self).__init__(id)
         self.__playbook = playbook
-    
+        self.__inventory = inventory
+        self.__extravars = extravars
+        self.__thread = None
+        self.__runner = None
+
+    def get_status(self):
+        if self.__thread is None:
+            return 'not_started'
+        elif self.__thread.is_alive():
+            return 'running'
+        else:
+            return 'ended'
+
+    def get_execution_stat(self):        
+        return self.__runner.stats
+
     def get_playbook(self):
         return self.__playbook
-
+    
+    def run(self):
+        self.__thread, self.__runner = ansible_runner.run_async(playbook=self.__playbook, inventory=self.__inventory, extravars=self.__extravars)
+        
 def nudge(pos, x_shift, y_shift):
     return {n:(x + x_shift, y + y_shift) for n,(x,y) in pos.items()}
 
 class AnsibleWorkflow():
-    def __init__(self, workflow_file):
+    def __init__(self, workflow, inventory):
         self.__graph = nx.DiGraph()
         self.__frontier = []
-        self.__allowed_node_keys = set(['block', 'import_playbook', 'name', 'strategy', 'id'])
-        self.__workflow_filename = workflow_file
+        self.__allowed_node_keys = set(['block', 'import_playbook', 'name', 'strategy', 'id', 'vars'])
+        self.__workflow_filename = workflow
+        self.__inventory_filename = inventory
         self.__import_file(self.__workflow_filename)
 
     def _get_input(self, filename):
@@ -55,14 +75,12 @@ class AnsibleWorkflow():
 
 
     def draw_graph(self):
+        # calculate node position using graphviz
         pos=nx.nx_agraph.graphviz_layout(self.__graph)        
-        nx.draw(self.__graph, pos=pos, verticalalignment='top')
         
-        # draw labels
-        label_position = nudge(pos, 0, 15) 
-        labels = {n: '' if isinstance(d['data'], BNode) else d['data'].get_playbook() for n, d in  list(self.__graph.nodes(data=True)) }
-        nx.draw_networkx_labels(self.__graph,labels=labels, pos=label_position, font_size=10)
-        
+        # draw all nodes
+        nx.draw_networkx_nodes(self.__graph, pos, node_size=250)
+
         # draw block nodes differently
         block_nodes=[n for n, d in  list(self.__graph.nodes(data=True)) if isinstance(d['data'], BNode) and d['data'].get_id() != 's' and d['data'].get_id() != 'e']        
         nx.draw_networkx_nodes(self.__graph, pos, nodelist=block_nodes, node_size=350, node_color="#777")
@@ -70,6 +88,13 @@ class AnsibleWorkflow():
         # draw start and end node differently
         nx.draw_networkx_nodes(self.__graph, pos, nodelist=['s'], node_size=500, node_color="#580")
         nx.draw_networkx_nodes(self.__graph, pos, nodelist=['e'], node_size=500, node_color="#a10")
+        # draw edges
+        nx.draw_networkx_edges(self.__graph, pos, width=1, alpha=0.9, edge_color="#777")
+
+        # draw labels
+        label_position = nudge(pos, 0, 20) 
+        labels = {n: '' if isinstance(d['data'], BNode) else d['data'].get_playbook() for n, d in  list(self.__graph.nodes(data=True)) }
+        nx.draw_networkx_labels(self.__graph,labels=labels, pos=label_position, font_size=10)
 
         plt.savefig(self.__workflow_filename + '.png')
 
@@ -94,19 +119,22 @@ class AnsibleWorkflow():
             for parent_node in parent_nodes:
                 self.__graph.add_edge(parent_node.get_id(), gnode_id)
 
-
-
             if strategy == 'serial':
                 parent_nodes = []
                 for zero_outdegree_node in zero_outdegree_nodes:
                     self.__graph.add_edge(zero_outdegree_node.get_id(), gnode_id)                
                 zero_outdegree_nodes = []
+
             # generate the object representing the graph
             if 'block' in inode:
                 gnode = BNode(gnode_id)
                 block_sub_nodes = self._import_nodes(inode['block'], [gnode,], inode.get('strategy','parallel'))
             else:
-                gnode = PNode(gnode_id, inode['import_playbook'])
+                playbook=inode['import_playbook']
+                inventory=inode.get('inventory', self.__inventory_filename)
+                extravars=inode.get('vars', {})
+                gnode = PNode(gnode_id, playbook=playbook, inventory=inventory, extravars=extravars)
+                print("     %s node: %s       playbook: %s     inventory: %s    vars: %s" % (indentation, gnode_id, playbook, inventory, extravars))                
 
             # the node specification is added
             self.__graph.add_node(gnode_id, data=gnode)
@@ -131,7 +159,7 @@ class AnsibleWorkflow():
 
 
 def main():
-    aw = AnsibleWorkflow("../examples/input4.yml")
+    aw = AnsibleWorkflow(workflow="../examples/input3.yml", inventory='inventory.yml')
     aw.draw_graph()
 
 if __name__ == "__main__":

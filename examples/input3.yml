@@ -1,17 +1,12 @@
 ---
-- id: 1
-  import_playbook: test3.yml
+- import_playbook: test3.yml
+  vars:
+    first_param: first_value
 
-- id: 2
-  block:
-    - id: 2.1
-      import_playbook: test1.yml
-    - id: 2.2
-      block:
-        - id: 2.2.1
-          import_playbook: test1.yml
-    - id: 2.3
-      import_playbook: test2.yml
+- block:
+    - import_playbook: test1.yml
+    - block:
+        - import_playbook: test1.yml
+    - import_playbook: test2.yml
 
-- id: 3
-  import_playbook: test3.yml
+- import_playbook: test3.yml
