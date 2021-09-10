@@ -27,29 +27,51 @@ class PNode(Node):
     def __init__(self, id, playbook):
         super(PNode, self).__init__(id)
         self.__playbook = playbook
+    
+    def get_playbook(self):
+        return self.__playbook
 
+def nudge(pos, x_shift, y_shift):
+    return {n:(x + x_shift, y + y_shift) for n,(x,y) in pos.items()}
 
 class AnsibleWorkflow():
-    def __init__(self):
+    def __init__(self, workflow_file):
         self.__graph = nx.DiGraph()
         self.__frontier = []
         self.__allowed_node_keys = set(['block', 'import_playbook', 'name', 'strategy', 'id'])
+        self.__workflow_filename = workflow_file
+        self.__import_file(self.__workflow_filename)
 
     def _get_input(self, filename):
         with open(filename, 'r') as stream:
             data_loaded = yaml.safe_load(stream)
         return data_loaded
 
-    def import_file(self, filename):
-        root_node=BNode('r')
-        self.__graph.add_node('r', data=root_node)
-        #self.__frontier.append(root_node)
-        self._import_nodes(self._get_input(filename), [root_node,],  strategy='serial')
-        pos=nx.nx_agraph.graphviz_layout(self.__graph)
-        nx.draw(self.__graph, pos=pos)
-        nx.draw_networkx_labels(self.__graph, pos=pos)
-        print("%s" % list(self.__graph))
-        plt.savefig("path.png")
+    def __import_file(self, filename):
+        input_file_data = self._get_input(filename)
+        input_file_data.insert(0, dict(id='s',block=[]))
+        input_file_data.append(dict(id='e',block=[]))
+        self._import_nodes(input_file_data, [], strategy='serial')
+
+
+    def draw_graph(self):
+        pos=nx.nx_agraph.graphviz_layout(self.__graph)        
+        nx.draw(self.__graph, pos=pos, verticalalignment='top')
+        
+        # draw labels
+        label_position = nudge(pos, 0, 15) 
+        labels = {n: '' if isinstance(d['data'], BNode) else d['data'].get_playbook() for n, d in  list(self.__graph.nodes(data=True)) }
+        nx.draw_networkx_labels(self.__graph,labels=labels, pos=label_position, font_size=10)
+        
+        # draw block nodes differently
+        block_nodes=[n for n, d in  list(self.__graph.nodes(data=True)) if isinstance(d['data'], BNode) and d['data'].get_id() != 's' and d['data'].get_id() != 'e']        
+        nx.draw_networkx_nodes(self.__graph, pos, nodelist=block_nodes, node_size=350, node_color="#777")
+        
+        # draw start and end node differently
+        nx.draw_networkx_nodes(self.__graph, pos, nodelist=['s'], node_size=500, node_color="#580")
+        nx.draw_networkx_nodes(self.__graph, pos, nodelist=['e'], node_size=500, node_color="#a10")
+
+        plt.savefig(self.__workflow_filename + '.png')
 
     def _check_node_syntax(self, node):
         remaining_keys = set(node.keys()) - self.__allowed_node_keys
@@ -67,7 +89,7 @@ class AnsibleWorkflow():
             
             # generate a node identifier
             gnode_id= inode.get('id',''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5)))
-            print("-->> %s node: %s       parents: %s       zero_outgree: %s" % (indentation, gnode_id, [p.get_id() for p in parent_nodes], [p.get_id() for p in  zero_outdegree_nodes]))
+            print("-->> %s node: %s       parents: %s       zero_outdegree: %s" % (indentation, gnode_id, [p.get_id() for p in parent_nodes], [p.get_id() for p in  zero_outdegree_nodes]))
             
             for parent_node in parent_nodes:
                 self.__graph.add_edge(parent_node.get_id(), gnode_id)
@@ -98,20 +120,19 @@ class AnsibleWorkflow():
 
             # if the strategy is serial
             if strategy == 'serial':
-                if 'block' in inode:
-                    # add the node from the subtree as parent
+                if 'block' in inode and len(inode['block']) > 0:
+                    # add the node from the subtree as parent                    
                     parent_nodes = block_sub_nodes
                 else:
                     # or add current node as the parent
                     parent_nodes = [gnode,]
-            print("<<-- %s node: %s       parents: %s       zero_outgree: %s" % (indentation, gnode_id, [p.get_id() for p in parent_nodes], [p.get_id() for p in  zero_outdegree_nodes]))
+            print("<<-- %s node: %s       parents: %s       zero_outdegree: %s" % (indentation, gnode_id, [p.get_id() for p in parent_nodes], [p.get_id() for p in  zero_outdegree_nodes]))
         return zero_outdegree_nodes
 
 
 def main():
-    aw = AnsibleWorkflow()
-    i = aw.import_file("../examples/input4.yml")
-
+    aw = AnsibleWorkflow("../examples/input4.yml")
+    aw.draw_graph()
 
 if __name__ == "__main__":
     main()

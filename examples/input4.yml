@@ -1,6 +1,6 @@
 ---
 - id: 1
-  import_playbook: test3.yml
+  import_playbook: first_playbook.yml
 
 - id: 2
   block:
