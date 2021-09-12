@@ -46,13 +46,17 @@ class PNode(Node):
     def get_status(self):
         if self.__thread is None:
             return 'not_started'
-        elif self.__thread.is_alive():
-            return 'running'
         else:
-            return 'ended'
+            print("Node %s status is %s - error is %s" % (self.get_id(), self.__runner.errored, self.__runner.status ))
+            if self.__thread.is_alive():
+                return 'running'
+            elif self.is_failed():
+                return 'failed'
+            else:
+                return 'ended'
 
-    def get_execution_stat(self):
-        return self.__runner.stats
+    def is_failed(self):
+        return self.__runner.status == 'failed'
 
     def get_playbook(self):
         return self.__playbook
@@ -182,18 +186,25 @@ class AnsibleWorkflow():
         self.__running_nodes = ['s']
         # loop over nodes
         while len(self.__running_nodes):
-            for node in self.__running_nodes:
-                print("Analyzing node %s" % node)
-                if self.__graph.nodes[node]['data'].get_status() == 'ended':
-                    self.__running_nodes.remove(node)
-                    for out_edge in self.__graph.out_edges(node):
+            for node_id in self.__running_nodes:
+                print("Analyzing node %s" % node_id)
+                node = self.__graph.nodes[node_id]['data']
+                # if current node is ended search for next nodes
+                if node.get_status() == 'ended':
+                    self.__running_nodes.remove(node_id)
+                    for out_edge in self.__graph.out_edges(node_id):
                         next_node_id = out_edge[1]
                         next_node = self.__graph.nodes[next_node_id]['data']
+
                         if self.__is_node_runnable(next_node_id):
                             print("Run node %s" % next_node_id)
                             self.__running_nodes.append(next_node_id)
                             if isinstance(next_node , PNode):
                                 next_node.run()
+                elif node.get_status() == 'failed':
+                    # just remove a failed node
+                    self.__running_nodes.remove(node_id)
+
             time.sleep(1)
         print("Running nodes %s" % self.__running_nodes)
 
