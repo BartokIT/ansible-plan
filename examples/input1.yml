@@ -2,12 +2,12 @@
 - id: 1
   block:
     - id: 1.1
-      import_playbook: start_first_component.yml
+      import_playbook: playbooks/first.yml
     - id: 1.2
-      import_playbook: start_second_component.yml
+      import_playbook: playbooks/second.yml
 - id: 2
   block:
     - id: 2.1
-      import_playbook: start_third_component.yml
+      import_playbook: playbooks/third.yml
     - id: 2.2
-      import_playbook: start_fourth_component.yml
+      import_playbook: playbooks/fourth.yml

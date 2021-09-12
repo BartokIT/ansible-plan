@@ -1,0 +1,14 @@
+---
+- name: third playbook
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: third task third playbook
+      debug:
+        msg: third task third playbook
+    - name: Pause 5 seconds
+      pause:
+        seconds: 5
+    - name: End task third playbook
+      debug:
+        msg: End task third playbook
