@@ -6,7 +6,7 @@
 - block:
     - import_playbook: test1.yml
     - block:
-        - import_playbook: test1.yml
+        - import_playbook: test1.1.yml
     - import_playbook: test2.yml
 
 - import_playbook: test3.yml
