@@ -78,6 +78,7 @@ class AnsibleWorkflow():
         # import data from file
         self.__import_file(self.__workflow_filename)
         self._import_nodes(self.__input_file_data, [], strategy='serial')
+        print("%s" % self.__graph.nodes)
 
     def _get_input(self, filename):
         with open(filename, 'r') as stream:
@@ -120,75 +121,6 @@ class AnsibleWorkflow():
         del import_tree[len(import_tree) - 1]
         self.__print_tree(import_tree)
 
-    def __print_subgraph(self, tree_data, level=0):
-        a = [ u'\u2524',
-u'\u2561',
-u'\u2562',
-u'\u2556',
-u'\u2555',
-u'\u2563',
-u'\u2551',
-u'\u2557',
-u'\u255d',
-u'\u255c',
-u'\u255b',
-u'\u2510',
-u'\u2514',
-u'\u2534',
-u'\u252c',
-u'\u251c',
-u'\u2500',
-u'\u253c',
-u'\u255e',
-u'\u255f',
-u'\u255a',
-u'\u2554',
-u'\u2569',
-u'\u2566',
-u'\u2560',
-u'\u2550',
-u'\u256c',
-u'\u2567',
-u'\u2568',
-u'\u2564',
-u'\u2565',
-u'\u2559',
-u'\u2558',
-u'\u2552',
-u'\u2553',
-u'\u256b',
-u'\u256a',
-u'\u2518',
-u'\u250c',
-u'\u2502']
-        for ai in a:
-
-            print(ai)
-
-        for inode in tree_data:
-            tree_char = u'\u251c'
-            prev = ""
-
-
-            if tree_data[0] == inode:
-                if level - 1 > 0:
-                    for i in range(level-1):
-                        prev += u'\u2502'
-                    prev += u'\u251c'
-                print(u'%s\u2510' % (prev))
-
-
-            if tree_data[-1] == inode:
-                tree_char = u'\u2514'
-                for i in range(level):
-                    prev += tree_char
-
-            if 'block' in inode:
-                self.__print_subgraph(inode['block'], level + 1)
-            else:
-                print(u'%s%s %s' % (" "*level, tree_char, inode['id']) )
-
-
     def __print_tree(self, nodes, prev_latest=False, level=0, prefix=''):
         for inode in nodes:
             # selection of char for current node
@@ -228,7 +160,7 @@ u'\u2502']
             else:
                 if level == 0:
                     previous_char = ''
-                print("%s%s%s %s" % (prefix, previous_char, current_char, inode['import_playbook']))
+                print("%s%s%s %s [%s]" % (prefix, previous_char, current_char, inode['import_playbook'], self.__graph.nodes[inode['id']]['data'].get_status()))
 
     def _check_node_syntax(self, node):
         remaining_keys = set(node.keys()) - self.__allowed_node_keys
@@ -246,9 +178,10 @@ u'\u2502']
 
             # generate a node identifier and set to the node
             gnode_id= inode.get('id',''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5)))
-            inode['id'] = str(gnode_id)
+            gnode_id= str(gnode_id)
+            inode['id'] =gnode_id
 
-            print("-->> %s node: %s       parents: %s       zero_outdegree: %s" % (indentation, gnode_id, [p.get_id() for p in parent_nodes], [p.get_id() for p in  zero_outdegree_nodes]))
+            print("-->> %s node: %s       parents: %s       zero_outdegree: %s" % (indentation, type(inode['id'] ), [p.get_id() for p in parent_nodes], [p.get_id() for p in  zero_outdegree_nodes]))
 
             for parent_node in parent_nodes:
                 self.__graph.add_edge(parent_node.get_id(), gnode_id)
@@ -331,7 +264,7 @@ def main():
     aw = AnsibleWorkflow(workflow="input4.yml", inventory='inventory.ini')
     aw.draw_graph()
     aw.print_graph()
-    #aw.run()
+    aw.run()
 
 if __name__ == "__main__":
     main()
