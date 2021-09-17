@@ -69,6 +69,102 @@ class PNode(Node):
 def nudge(pos, x_shift, y_shift):
     return {n:(x + x_shift, y + y_shift) for n,(x,y) in pos.items()}
 
+class CursesGui():
+    def __init__(self):
+        self.__main_window = None
+        self.__progress_window = None
+        self.__progress_window_width = 20
+        self.__window_margin = 3
+        self.__first_draw = True
+        self.__row = 0
+        terminal = curses.initscr()
+        self.__define_color()
+
+        self.__max_y, self.__max_x = terminal.getmaxyx()
+        self.__main_window = curses.newwin(self.__max_y - self.__window_margin , self.__max_x - self.__window_margin - self.__progress_window_width, self.__window_margin, self.__window_margin)
+        self.__progress_window = curses.newwin(self.__max_y - self.__window_margin, self.__progress_window_width,  self.__window_margin, self.__max_x - self.__window_margin - self.__progress_window_width)
+        self.__status_map = {'not_started': {'label': 'not started', 'color': 1},
+                             'running': {'label': 'running', 'color': 2},
+                             'failed': {'label': 'failed', 'color': 3},
+                             'ended': {'label': 'ended', 'color': 4} }
+
+    def __define_color(self):
+        curses.start_color()
+        curses.use_default_colors()
+        curses.init_pair(1, curses.COLOR_WHITE, -1) # not started
+        curses.init_pair(2, curses.COLOR_YELLOW, -1) # running
+        curses.init_pair(3, curses.COLOR_RED, -1) # failed
+        curses.init_pair(4, curses.COLOR_GREEN, -1) # ended
+
+    def print_status(self, input_tree, graph):
+        import_tree = copy.deepcopy(input_tree)
+        del import_tree[0]
+        del import_tree[len(import_tree) - 1]
+
+        #self.__main_window.addstr(0, 0, '┬' )
+        self.__row = 0
+        #self.__main_window.clear()
+        self.__progress_window.clear()
+        self.__print_tree(import_tree, graph)
+        # refresh
+        if self.__first_draw:
+            self.__main_window.refresh()
+        self.__progress_window.refresh()
+        curses.napms(1000)
+        self.__first_draw = False
+
+    def __print_tree(self,  nodes, graph, prev_latest=False, level=0, prefix=''):
+        for inode in nodes:
+            # selection of char for current node
+            current_char = '├'
+            previous_char = '│'
+            next_prefix = ''
+
+            if nodes[-1] == inode: # latest element
+                current_char = '└'
+
+                if nodes[0] == inode: # is composed by one element
+                    current_char = '─'
+                    if not prev_latest:
+                        previous_char = '├'
+                else:
+                    if prev_latest:
+                        previous_char = ' '
+            elif nodes[0] == inode: # is the first
+                current_char = '┬'
+                if prev_latest:
+                    previous_char = '└'
+                else:
+                    previous_char = '├'
+            elif prev_latest:
+                previous_char = ' '
+
+            # prefix
+            if level > 0:
+                next_prefix = '│'
+                if prev_latest:
+                    next_prefix = ' '
+
+
+            #print("node: %s | level: %s | prev_latest: %s | prev_char: %s | current_char: %s | next_prefix: #%s# | prefix: #%s#" % ( inode['id'], level, prev_latest, previous_char, current_char, next_prefix, prefix))
+            if 'block' in inode:
+                self.__print_tree(inode['block'], graph, prev_latest=(nodes[-1] == inode), level=(level + 1), prefix=prefix+next_prefix)
+            else:
+                if level == 0:
+                    previous_char = ''
+                # draw tree node
+                tree_string =  "%s%s%s %s - %s" % (prefix, previous_char, current_char, inode['id'], inode['import_playbook'])
+                self.__main_window.addstr(self.__row, 0, tree_string)
+                # draw filling dots
+                self.__main_window.addstr(self.__row, len(tree_string.strip()) + 1, "."*(self.__max_x - len(tree_string.strip()) - 5 - self.__window_margin - self.__progress_window_width))
+                # draw status
+                node_status =   graph.nodes[inode['id']]['data'].get_status()
+                status_label = self.__status_map[node_status]['label']
+                status_color  = self.__status_map[node_status]['color']
+                self.__progress_window.addstr(self.__row, 1, "%s" % status_label, curses.color_pair(status_color))
+                self.__row = self.__row + 1
+
+
 class AnsibleWorkflow():
     def __init__(self, workflow, inventory):
         self.__graph = nx.DiGraph()
@@ -77,7 +173,6 @@ class AnsibleWorkflow():
         self.__inventory_filename = inventory
         self.__running_nodes = ['s']
         self.__running_statues = 'not_started'
-        self.__row = 0
 
         # import data from file
         self.__import_file(self.__workflow_filename)
@@ -119,73 +214,20 @@ class AnsibleWorkflow():
 
         plt.savefig(self.__workflow_filename + '.png')
 
-    def __print_graph(self, window):
-        import_tree = copy.deepcopy(self.__input_file_data)
-        del import_tree[0]
-        del import_tree[len(import_tree) - 1]
-        self.__print_tree(window, import_tree)
-
-
-    def __print_tree(self, window, nodes, prev_latest=False, level=0, prefix=''):
-        for inode in nodes:
-            # selection of char for current node
-            current_char = '├'
-            previous_char = '│'
-            next_prefix = ''
-
-            if nodes[-1] == inode: # latest element
-                current_char = '└'
-
-                if nodes[0] == inode: # is composed by one element
-                    current_char = '─'
-                    if not prev_latest:
-                        previous_char = '├'
-                else:
-                    if prev_latest:
-                        previous_char = ' '
-            elif nodes[0] == inode: # is the first
-                current_char = '┬'
-                if prev_latest:
-                    previous_char = '└'
-                else:
-                    previous_char = '├'
-            elif prev_latest:
-                previous_char = ' '
-
-            # prefix
-            if level > 0:
-                next_prefix = '│'
-                if prev_latest:
-                    next_prefix = ' '
-
-
-            #print("node: %s | level: %s | prev_latest: %s | prev_char: %s | current_char: %s | next_prefix: #%s# | prefix: #%s#" % ( inode['id'], level, prev_latest, previous_char, current_char, next_prefix, prefix))
-            if 'block' in inode:
-                self.__print_tree(window, inode['block'], prev_latest=(nodes[-1] == inode), level=(level + 1), prefix=prefix+next_prefix)
-            else:
-                if level == 0:
-                    previous_char = ''
-                window.addstr(self.__row, 0, "%s%s%s %s [%s]" % (prefix, previous_char, current_char, inode['import_playbook'], self.__graph.nodes[inode['id']]['data'].get_status()))
-                self.__row = self.__row + 1
 
     def run_graphically(self):
-        terminal = curses.initscr()
-        max_y, max_x = terminal.getmaxyx()
-        main_win = curses.newwin(max_y, max_x, 0, 0)
+        # review to use separated thread
         if self.__running_statues != 'not_started':
             raise Exception("Already running")
         self.__running_statues = 'started'
+        cg = CursesGui()
+        # loop over running nodes
         while len(self.__running_nodes):
-            self.__row = 0
             self.__run_step()
-            self.__print_graph(main_win)
-            main_win.refresh()
-            main_win.clear()
-            curses.napms(2000)
-            terminal.refresh()
-            terminal.clear()
-        terminal.clear()
+            cg.print_status(self.__input_file_data, self.__graph)
+
         curses.endwin()
+
         self.__running_statues = 'ended'
 
 
@@ -291,13 +333,14 @@ class AnsibleWorkflow():
             self.__run_step()
         self.__running_statues = 'ended'
 
-def main():
-    aw = AnsibleWorkflow(workflow="input1.yml", inventory='inventory.ini')
+def main(stdscr):
+    aw = AnsibleWorkflow(workflow="input2.yml", inventory='inventory.ini')
     #aw.draw_graph()
     #aw.print_graph()
     aw.run_graphically()
     #aw.run()
+    #stdscr.getch()
 
 
 if __name__ == "__main__":
-    main()
+    curses.wrapper(main)
