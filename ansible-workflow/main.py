@@ -183,7 +183,8 @@ class AnsibleWorkflow():
             main_win.clear()
             curses.napms(2000)
             terminal.refresh()
-            #terminal.clear()
+            terminal.clear()
+        terminal.clear()
         curses.endwin()
         self.__running_statues = 'ended'
 
