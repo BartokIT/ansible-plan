@@ -11,6 +11,7 @@ import abc
 import time
 import os
 import copy
+import curses
 
 class Node():
     __metaclass__ = abc.ABCMeta
@@ -74,7 +75,10 @@ class AnsibleWorkflow():
         self.__allowed_node_keys = set(['block', 'import_playbook', 'name', 'strategy', 'id', 'vars'])
         self.__workflow_filename = workflow
         self.__inventory_filename = inventory
-        self.__running_nodes = []
+        self.__running_nodes = ['s']
+        self.__running_statues = 'not_started'
+        self.__row = 0
+
         # import data from file
         self.__import_file(self.__workflow_filename)
         self._import_nodes(self.__input_file_data, [], strategy='serial')
@@ -87,8 +91,8 @@ class AnsibleWorkflow():
 
     def __import_file(self, filename):
         input_file_data = self._get_input(filename)
-        input_file_data.insert(0, dict(id='s',block=[]))
-        input_file_data.append(dict(id='e',block=[]))
+        input_file_data.insert(0, dict(id='s', block=[]))
+        input_file_data.append(dict(id='e', block=[]))
         self.__input_file_data = input_file_data
 
     def draw_graph(self):
@@ -115,13 +119,14 @@ class AnsibleWorkflow():
 
         plt.savefig(self.__workflow_filename + '.png')
 
-    def print_graph(self):
+    def __print_graph(self, window):
         import_tree = copy.deepcopy(self.__input_file_data)
         del import_tree[0]
         del import_tree[len(import_tree) - 1]
-        self.__print_tree(import_tree)
+        self.__print_tree(window, import_tree)
 
-    def __print_tree(self, nodes, prev_latest=False, level=0, prefix=''):
+
+    def __print_tree(self, window, nodes, prev_latest=False, level=0, prefix=''):
         for inode in nodes:
             # selection of char for current node
             current_char = '├'
@@ -156,11 +161,32 @@ class AnsibleWorkflow():
 
             #print("node: %s | level: %s | prev_latest: %s | prev_char: %s | current_char: %s | next_prefix: #%s# | prefix: #%s#" % ( inode['id'], level, prev_latest, previous_char, current_char, next_prefix, prefix))
             if 'block' in inode:
-                self.__print_tree(inode['block'], prev_latest=(nodes[-1] == inode), level=(level + 1), prefix=prefix+next_prefix)
+                self.__print_tree(window, inode['block'], prev_latest=(nodes[-1] == inode), level=(level + 1), prefix=prefix+next_prefix)
             else:
                 if level == 0:
                     previous_char = ''
-                print("%s%s%s %s [%s]" % (prefix, previous_char, current_char, inode['import_playbook'], self.__graph.nodes[inode['id']]['data'].get_status()))
+                window.addstr(self.__row, 0, "%s%s%s %s [%s]" % (prefix, previous_char, current_char, inode['import_playbook'], self.__graph.nodes[inode['id']]['data'].get_status()))
+                self.__row = self.__row + 1
+
+    def run_graphically(self):
+        terminal = curses.initscr()
+        max_y, max_x = terminal.getmaxyx()
+        main_win = curses.newwin(max_y, max_x, 0, 0)
+        if self.__running_statues != 'not_started':
+            raise Exception("Already running")
+        self.__running_statues = 'started'
+        while len(self.__running_nodes):
+            self.__row = 0
+            self.__run_step()
+            self.__print_graph(main_win)
+            main_win.refresh()
+            main_win.clear()
+            curses.napms(2000)
+            terminal.refresh()
+            #terminal.clear()
+        curses.endwin()
+        self.__running_statues = 'ended'
+
 
     def _check_node_syntax(self, node):
         remaining_keys = set(node.keys()) - self.__allowed_node_keys
@@ -179,9 +205,9 @@ class AnsibleWorkflow():
             # generate a node identifier and set to the node
             gnode_id= inode.get('id',''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5)))
             gnode_id= str(gnode_id)
-            inode['id'] =gnode_id
+            inode['id']= gnode_id
 
-            print("-->> %s node: %s       parents: %s       zero_outdegree: %s" % (indentation, type(inode['id'] ), [p.get_id() for p in parent_nodes], [p.get_id() for p in  zero_outdegree_nodes]))
+            print("-->> %s node: %s       parents: %s       zero_outdegree: %s" % (indentation, inode['id'], [p.get_id() for p in parent_nodes], [p.get_id() for p in  zero_outdegree_nodes]))
 
             for parent_node in parent_nodes:
                 self.__graph.add_edge(parent_node.get_id(), gnode_id)
@@ -234,37 +260,43 @@ class AnsibleWorkflow():
                 return False
         return True
 
+    def __run_step(self):
+        for node_id in self.__running_nodes:
+
+            node = self.__graph.nodes[node_id]['data']
+            # if current node is ended search for next nodes
+            if node.get_status() == 'ended':
+                self.__running_nodes.remove(node_id)
+                for out_edge in self.__graph.out_edges(node_id):
+                    next_node_id = out_edge[1]
+                    next_node = self.__graph.nodes[next_node_id]['data']
+
+                    if self.__is_node_runnable(next_node_id):
+                        print("Run node %s" % next_node_id)
+                        self.__running_nodes.append(next_node_id)
+                        if isinstance(next_node , PNode):
+                            next_node.run()
+            elif node.get_status() == 'failed':
+                # just remove a failed node
+                print("Failed node %s" % node_id)
+                self.__running_nodes.remove(node_id)
+
     def run(self):
-        self.__running_nodes = ['s']
+        if self.__running_statues != 'not_started':
+            raise Exception("Already running")
+        self.__running_statues = 'started'
         # loop over nodes
         while len(self.__running_nodes):
-            for node_id in self.__running_nodes:
-                # print("Analyzing node %s" % node_id)
-                node = self.__graph.nodes[node_id]['data']
-                # if current node is ended search for next nodes
-                if node.get_status() == 'ended':
-                    self.__running_nodes.remove(node_id)
-                    for out_edge in self.__graph.out_edges(node_id):
-                        next_node_id = out_edge[1]
-                        next_node = self.__graph.nodes[next_node_id]['data']
-
-                        if self.__is_node_runnable(next_node_id):
-                            print("Run node %s" % next_node_id)
-                            self.__running_nodes.append(next_node_id)
-                            if isinstance(next_node , PNode):
-                                next_node.run()
-                elif node.get_status() == 'failed':
-                    # just remove a failed node
-                    self.__running_nodes.remove(node_id)
-
-            time.sleep(1)
-        print("Running nodes %s" % self.__running_nodes)
+            self.__run_step()
+        self.__running_statues = 'ended'
 
 def main():
-    aw = AnsibleWorkflow(workflow="input4.yml", inventory='inventory.ini')
-    aw.draw_graph()
-    aw.print_graph()
-    aw.run()
+    aw = AnsibleWorkflow(workflow="input1.yml", inventory='inventory.ini')
+    #aw.draw_graph()
+    #aw.print_graph()
+    aw.run_graphically()
+    #aw.run()
+
 
 if __name__ == "__main__":
     main()
