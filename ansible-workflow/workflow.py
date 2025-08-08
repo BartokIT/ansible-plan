@@ -180,7 +180,8 @@ class AnsibleWorkflow():
 
             # the node specification is added
             self.__graph.add_node(gnode_id)
-            self.__data[gnode_id]=dict(object=gnode)
+            self.__data[gnode_id]=dict(object=gnode,
+                                       vars=inode.get('vars', {}))
 
 
             if 'block' not in inode:
