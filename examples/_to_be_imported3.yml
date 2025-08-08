@@ -1,0 +1,19 @@
+---
+id: included
+strategy: parallel
+templating:
+  overridden_var: override inside
+block:
+  - id: i3_1
+    import_playbook: playbooks/first.yml
+    limit: second_hostname,first_hostname
+  - id: i3_2
+    import_playbook: playbooks/second.yml
+    limit: "vars {{ first_var }},{{ second_var }},{{ overridden_var }}"
+  - id: i3_3
+    templating:
+      overridden_var: to_be_imported_override
+    block:
+      - id: i3_3.1
+        import_playbook: playbooks/second.yml
+        limit: "vars {{ first_var }},{{ second_var }},{{ overridden_var }}"

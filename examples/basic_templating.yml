@@ -1,0 +1,31 @@
+---
+options:
+  global_path: examples/
+  vault_script: vault_script_test.py
+templating:
+  first_var: first_hostname
+defaults:
+  inventory: inventory.ini
+workflow:
+  - id: 1
+    block:
+      - id: 1.1
+        import_playbook: playbooks/first.yml
+        limit: second_hostname,{{ first_var }}
+      - id: 1.2
+        import_playbook: playbooks/second.yml
+  - id: 2
+    project_path: project1
+    import_playbook: playbooks/project1.yml
+  - id: 3
+    import_playbook: playbooks/encrypted.yml
+    vault_ids:
+      - V1
+  - id: 4
+    block:
+      - id: 4.1
+        import_playbook: playbooks/encrypted.yml
+        vault_ids:
+          - V1
+      - id: 4.2
+        import_playbook: playbooks/fourth.yml

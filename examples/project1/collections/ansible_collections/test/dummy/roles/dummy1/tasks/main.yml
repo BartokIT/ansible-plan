@@ -1,0 +1,4 @@
+---
+- name: Dummy print
+  debug:
+    msg: "Entered inside the role dummy1"

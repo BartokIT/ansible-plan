@@ -1,48 +1,10 @@
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Logs
-*.log
-logs/
-
-# Temporary files
-/tmp/
-*.tmp
-*.temp
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Ansible
-*.retry
-.vault_pass
-
-# Project specific
-workflow_graph.png
-workflow_report.json
-/playbooks/*.retry
+.eggs
+ansible_workflow.egg-info
+build
+dist
+ansible_workflow/__pycache__
+AUTHORS
+ChangeLog
+.pyc
+__pycache__
+.vscode

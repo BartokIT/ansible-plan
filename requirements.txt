@@ -1,7 +1,9 @@
 networkx
 ansible-runner
-matplotlib
-graphviz
-pygraphviz
-textual
-Pyro5
+jsonschema
+pbr
+wheel
+# matplotlib
+# uncomment to generate graph file
+# graphviz
+# pygraphviz

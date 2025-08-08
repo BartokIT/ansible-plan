@@ -1,0 +1,28 @@
+---
+options:
+  global_path: examples/
+  vault_script: vault_script_test.py
+defaults:
+  inventory: inventory.ini
+workflow:
+  - id: 1
+    import_playbook: playbooks/first.yml
+    vars:
+      first_param: playbooks/first_value
+  - id: 2
+    import_playbook: playbooks/second.yml
+
+  - id: block_1
+    block:
+    - id: failing
+      import_playbook: playbooks/retrying_play.yml
+    - id: block_2
+      strategy: serial
+      block:
+      - id: 3
+        import_playbook: playbooks/third.yml
+      - id: 4
+        import_playbook: playbooks/fourth.yml
+
+  - id: last
+    import_playbook: playbooks/first.yml

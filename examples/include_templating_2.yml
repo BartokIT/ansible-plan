@@ -1,0 +1,14 @@
+---
+options:
+  global_path: examples/
+  vault_script: vault_script_test.py
+templating:
+  first_var: "first_hostname"
+defaults:
+  inventory: inventory.ini
+workflow:
+
+  - id: prova
+    include_block: _to_be_imported4.yml
+    templating:
+      second_var: "{{ first_var }} prova"

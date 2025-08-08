@@ -1,0 +1,23 @@
+---
+options:
+  global_path: examples/
+  vault_script: vault_script_test.py
+templating:
+  first_var: "first_hostname"
+  overridden_var: original
+  second_var: nope
+  play_name: _to_be_imported_minimal
+defaults:
+  inventory: inventory.ini
+workflow:
+  - id: 1
+    block:
+      - id: 1.1
+        block:
+          - id: 1.1.1
+            block:
+              - id: 1.1.1.1
+                include_block: "{{ play_name }}.yml"
+                id_prefix: "{{ prefix }}"
+                templating:
+                  prefix: XXX

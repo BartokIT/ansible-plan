@@ -1,0 +1,14 @@
+---
+id: included
+strategy: parallel
+block:
+  - id: i1_1
+    import_playbook: playbooks/first.yml
+    limit: second_hostname,first_hostname
+  - id: i1_2
+    import_playbook: playbooks/second.yml
+  - id: i1_3
+    import_playbook: playbooks/second.yml
+  - id: i1_4
+    id_prefix: 'sub'
+    include_block: _to_be_imported.yml

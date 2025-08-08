@@ -1,0 +1,39 @@
+---
+options:
+  global_path: examples/
+  vault_script: vault_script_test.py
+templating:
+  first_var: "first_hostname"
+  overridden_var: original
+  second_var: nope
+  play_name: _to_be_imported3
+defaults:
+  inventory: inventory.ini
+workflow:
+  - id: 1
+    templating:
+      second_var: second_hostname
+      overridden_var: first_override
+    block:
+      - id: 1.1{{ ( second_var == 'nope' ) | ternary('yes', 'no') }}
+        import_playbook: playbooks/first.yml
+        limit: "vars {{ first_var }},{{ second_var }},{{ overridden_var }}"
+      - id: 1.2
+        templating:
+          overridden_var: second_override
+        block:
+          - id: 1.2.1
+            import_playbook: playbooks/second.yml
+            limit: "{{ overridden_var}}"
+          - id: 1.2.2
+            templating:
+              overridden_var: third_overridden
+            block:
+              - id: 1.2.2.1
+                import_playbook: playbooks/second.yml
+                limit: "{{ overridden_var}}"
+              - id: 5.3
+                include_block: "{{ play_name }}.yml"
+                id_prefix: "{{ prefix }}"
+                templating:
+                  prefix: XXX

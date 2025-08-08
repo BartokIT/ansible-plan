@@ -1,0 +1,7 @@
+---
+id: included
+strategy: parallel
+block:
+  - id: i2_1
+    import_playbook: playbooks/first.yml
+    limit: "second_hostname {{ second_var }},first_hostname"

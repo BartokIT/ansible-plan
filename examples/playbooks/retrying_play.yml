@@ -1,0 +1,32 @@
+---
+- name: Retrying playbook
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: First task first playbook
+      debug:
+        msg: First task first playbook
+
+    - name: Pause 5 seconds
+      pause:
+        seconds: 5
+
+    - name: End task first playbook
+      stat:
+        path: /tmp/retry
+      register: retrying
+
+    - name: Copy content
+      copy:
+        content: 'fail'
+        dest: /tmp/retry
+      when: not retrying.stat.exists
+
+    - name: Fail if not exitst
+      fail:
+      when: not retrying.stat.exists
+
+    - name: Remove file
+      file:
+        state: absent
+        path: /tmp/retry

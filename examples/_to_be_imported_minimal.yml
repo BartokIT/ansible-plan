@@ -1,0 +1,13 @@
+---
+id: included
+strategy: parallel
+templating:
+  overridden_var: override inside
+block:
+  - id: im_1
+    templating:
+      overridden_var: to_be_imported_override
+    block:
+      - id: im_1.1
+        import_playbook: playbooks/second.yml
+        limit: "vars {{ first_var }},{{ second_var }},{{ overridden_var }}"

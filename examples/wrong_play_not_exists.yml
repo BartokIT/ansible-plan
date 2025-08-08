@@ -1,0 +1,14 @@
+---
+options:
+  global_path: examples/
+  vault_script: vault_script_test.py
+defaults:
+  inventory: inventory.ini
+workflow:
+  - id: 1
+    block:
+      - id: 1.1
+        import_playbook: playbooks/firstw.yml
+        limit: second_hostname,first_hostname
+      - id: 1.2
+        import_playbook: playbooks/second.yml
