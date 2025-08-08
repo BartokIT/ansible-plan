@@ -19,7 +19,7 @@
 
 import threading, time
 from workflow import AnsibleWorkflow
-from print_curses import CursesGui
+from textual_gui import WorkflowApp
 import argparse
 import os.path
 import sys
@@ -34,8 +34,8 @@ def read_options():
     parser.add_argument('--no-curses', dest='skip_curses', default=False,
                         action='store_true',
                         help='skip the rendering of the progress using curses.')
-    parser.add_argument('--log-dir', dest='log_dir', default='/var/log/ansible/workflows',
-                        help='set the parent output logging directory. defaults to /var/log/ansible/workflows/[workflow name]-[execution time]')
+    parser.add_argument('--log-dir', dest='log_dir', default='ansible-workflow-logs',
+                        help='set the parent output logging directory. defaults to ./ansible-workflow-logs/[workflow name]-[execution time]')
 
     return parser.parse_args()
 
@@ -67,9 +67,13 @@ def main():
     #aw.run()
     #stdscr.getch()
     if not cmd_args.skip_curses:
-        gui_thread = CursesGui(workflow=aw)
-        gui_thread.start()
-    aw.run()
+        workflow_thread = threading.Thread(target=aw.run)
+        workflow_thread.start()
+        app = WorkflowApp()
+        app.set_workflow(aw)
+        app.run()
+    else:
+        aw.run()
 
 if __name__ == "__main__":
     main()
