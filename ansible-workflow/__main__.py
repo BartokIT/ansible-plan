@@ -67,8 +67,6 @@ def main():
     #aw.run()
     #stdscr.getch()
     if not cmd_args.skip_curses:
-        workflow_thread = threading.Thread(target=aw.run)
-        workflow_thread.start()
         app = WorkflowApp()
         app.set_workflow(aw)
         app.run()
