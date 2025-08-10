@@ -1,4 +1,2 @@
 *.png
 ansible-workflow/__pycache__
-*.pyc
-__pycache__

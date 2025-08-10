@@ -25,7 +25,7 @@ class WorkflowUi(App):
         super().__init__()
         self.workflow = workflow_proxy
         self.polling_timer = None
-        self.spinner_cycle = cycle(["⏳", "⌛"])
+        self.spinner_cycle = cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
         self.log_stream_worker = None
 
     def compose(self) -> ComposeResult:
@@ -78,12 +78,12 @@ class WorkflowUi(App):
             tree = self.query_one(Tree)
 
             status_map = {
-                'not_started': "⚪",
-                'running': f"{next(self.spinner_cycle)}",
-                'ended': "✅",
-                'failed': "❌",
-                'stopped': "🛑",
-                'skipped': "🚫",
+                'not_started': "[ ]",
+                'running': f"[[yellow]{next(self.spinner_cycle)}[/yellow]]",
+                'ended': "[[green]✔[/green]]",
+                'failed': "[[red]✖[/red]]",
+                'stopped': "[[orange]S[/orange]]",
+                'skipped': "[[grey]][-][/grey]]",
             }
 
             def update_node_label(node):
