@@ -138,7 +138,7 @@ class WorkflowUi(App):
 
         self.log_stream_worker = self.stream_log(node_id)
 
-    @work(exclusive=True)
+    @work(exclusive=False)
     async def stream_log(self, node_id: str) -> None:
         """Worker to stream log output for a node."""
         log_widget = self.query_one("#output-log")
