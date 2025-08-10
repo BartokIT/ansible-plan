@@ -40,11 +40,11 @@ def main():
 
     if args.command == 'server':
         check_file_existence(args.workflow, args.inventory)
-        from ansible_workflow.server import start_server
+        from server import start_server
         start_server(args.workflow, args.inventory, args.log_dir)
 
     elif args.command == 'client':
-        from ansible_workflow.client import main as client_main
+        from client import main as client_main
         client_main()
 
 if __name__ == "__main__":

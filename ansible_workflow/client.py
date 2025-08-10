@@ -25,7 +25,7 @@ class WorkflowUi(App):
         super().__init__()
         self.workflow = workflow_proxy
         self.polling_timer = None
-        self.spinner_cycle = cycle(["⏳", "⌛"])
+        self.spinner_cycle = cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
         self.log_stream_worker = None
 
     def compose(self) -> ComposeResult:

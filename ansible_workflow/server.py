@@ -4,7 +4,7 @@ import sys
 import threading
 import os
 import time
-from .workflow import AnsibleWorkflow
+from workflow import AnsibleWorkflow
 from datetime import datetime
 
 def start_server(workflow_path, inventory_path, log_dir_base):
