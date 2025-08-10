@@ -7,65 +7,94 @@ import time
 from .workflow import AnsibleWorkflow
 from datetime import datetime
 
-def start_server(workflow_path, inventory_path, log_dir_base):
-    # The logging dir needs to be created, similar to the original __main__.py
-    if not os.path.exists(log_dir_base):
-        os.makedirs(log_dir_base)
+PYRO_CONTROLLER_NAME = "ansible.workflow.controller"
 
-    logging_dir = "%s/%s_%s" % (log_dir_base, os.path.basename(workflow_path), datetime.now().strftime("%Y%m%d_%H%M%S"))
+@Pyro5.api.expose
+class WorkflowController:
+    def __init__(self):
+        self.workflow = None
+        self.log_dir_base = "/tmp/ansible-workflows"
+        if not os.path.exists(self.log_dir_base):
+            os.makedirs(self.log_dir_base)
 
+    def load_workflow(self, workflow_path, inventory_path):
+        """Loads a new workflow, but only if one is not already active."""
+        if self.workflow and self.workflow.get_workflow_status() not in ['ended', 'stopped', 'failed']:
+             # If a workflow is active, just return its status
+            return f"Workflow already active with status: {self.workflow.get_workflow_status()}"
+
+        logging_dir = "%s/%s_%s" % (self.log_dir_base, os.path.basename(workflow_path), datetime.now().strftime("%Y%m%d_%H%M%S"))
+
+        try:
+            self.workflow = AnsibleWorkflow(
+                workflow=workflow_path,
+                inventory=inventory_path,
+                logging_dir=logging_dir
+            )
+            return "Workflow loaded successfully."
+        except Exception as e:
+            return f"Error loading workflow: {e}"
+
+    def get_workflow_status(self):
+        if not self.workflow:
+            return "no_workflow_loaded"
+        return self.workflow.get_workflow_status()
+
+    def get_input_data(self):
+        if not self.workflow:
+            return []
+        return self.workflow.get_input_data()
+
+    def get_nodes_status(self):
+        if not self.workflow:
+            return {}
+        return self.workflow.get_nodes_status()
+
+    def run(self):
+        if not self.workflow:
+            return "No workflow loaded."
+        return self.workflow.run()
+
+    def stop(self):
+        if not self.workflow:
+            return "No workflow loaded."
+        self.workflow.stop()
+        return "Stop signal sent."
+
+    def tail_playbook_output(self, node_id, offset=0):
+        if not self.workflow:
+            return "No workflow loaded.", 0
+        return self.workflow.tail_playbook_output(node_id, offset)
+
+
+def start_server():
     print("Starting Pyro name server in background...")
     ns_thread = threading.Thread(target=Pyro5.nameserver.start_ns_loop)
     ns_thread.daemon = True
     ns_thread.start()
-    time.sleep(1) # Give the name server a moment to start
+    time.sleep(1)
 
-    print(f"Starting workflow server for: {workflow_path}")
-    print(f"Logging to: {logging_dir}")
-
-    # We need a daemon to listen for requests
+    print("Starting workflow controller server...")
     daemon = Pyro5.api.Daemon()
-
-    # Find a suitable name server
     ns = Pyro5.api.locate_ns()
 
-    # Create an instance of the workflow
-    ansible_workflow = AnsibleWorkflow(workflow=workflow_path,
-                                       inventory=inventory_path,
-                                       logging_dir=logging_dir)
+    controller = WorkflowController()
+    uri = daemon.register(controller)
+    ns.register(PYRO_CONTROLLER_NAME, uri)
 
-    # Register the workflow instance as a Pyro object
-    uri = daemon.register(ansible_workflow)
+    print(f"Server ready. Controller registered as '{PYRO_CONTROLLER_NAME}'")
 
-    # Register the object with a name in the name server
-    # Using a fixed name for simplicity. In a real-world scenario, you might
-    # want to use a unique name per workflow.
-    ns.register("ansible.workflow", uri)
-
-    print("Server ready. Object uri =", uri)
-    print("Registered as 'ansible.workflow' in the name server.")
-
-    # The daemon will run in the main thread.
-    # The client will call the run() method on the workflow object,
-    # which will start a new thread for the workflow execution.
     try:
         daemon.requestLoop()
     except KeyboardInterrupt:
         print("Shutting down server.")
     finally:
-        ns.remove("ansible.workflow")
+        ns.remove(PYRO_CONTROLLER_NAME)
         daemon.shutdown()
 
 def main():
     # This main is for standalone execution for testing
-    if len(sys.argv) < 3:
-        print("Usage: python -m ansible-workflow.server <workflow_file> <inventory_file>")
-        sys.exit(1)
-
-    workflow_path = sys.argv[1]
-    inventory_path = sys.argv[2]
-    log_dir = "/tmp/ansible-workflows"
-    start_server(workflow_path, inventory_path, log_dir)
+    start_server()
 
 if __name__ == "__main__":
     main()

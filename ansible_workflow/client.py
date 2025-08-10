@@ -9,7 +9,7 @@ import os
 import asyncio
 
 # The name of the Pyro object registered on the name server
-PYRO_NAME = "ansible.workflow"
+PYRO_CONTROLLER_NAME = "ansible.workflow.controller"
 
 class WorkflowUi(App):
     """A Textual app to manage and monitor Ansible workflows."""
@@ -21,9 +21,11 @@ class WorkflowUi(App):
         ("q", "quit", "Quit"),
     ]
 
-    def __init__(self, workflow_proxy):
+    def __init__(self, controller_proxy, workflow_path, inventory_path):
         super().__init__()
-        self.workflow = workflow_proxy
+        self.controller = controller_proxy
+        self.workflow_path = workflow_path
+        self.inventory_path = inventory_path
         self.polling_timer = None
         self.spinner_cycle = cycle(["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"])
         self.log_stream_worker = None
@@ -43,20 +45,34 @@ class WorkflowUi(App):
 
     def on_mount(self) -> None:
         """Called when app is mounted."""
-        self.build_tree()
+        self.load_workflow_and_build_tree()
         self.polling_timer = self.set_interval(1, self.update_statuses)
 
-    def build_tree(self) -> None:
-        """Builds the workflow tree from data fetched from the server."""
-        tree = self.query_one(Tree)
-        tree.clear()
+    @work(exclusive=True)
+    async def load_workflow_and_build_tree(self) -> None:
+        """Loads the workflow on the server and builds the initial tree."""
+        log_widget = self.query_one("#output-log")
+        log_widget.write("Loading workflow on server...")
         try:
-            workflow_data = self.workflow.get_input_data()
+            result = self.controller.load_workflow(self.workflow_path, self.inventory_path)
+            log_widget.write(f"Server: {result}")
+            if "Error" in result:
+                self.query_one("#start-button").disabled = True
+                return
+
+            tree = self.query_one(Tree)
+            tree.clear()
+            workflow_data = self.controller.get_input_data()
+            if not workflow_data:
+                log_widget.write("Failed to get workflow data from server.")
+                return
             actual_workflow = workflow_data[1:-1] # Skip 's' and 'e' nodes
             self._recursive_build_tree(tree.root, actual_workflow)
             tree.root.expand()
+            log_widget.write("Workflow tree built.")
+
         except Exception as e:
-            self.query_one("#output-log").write(f"Error building tree: {e}")
+            log_widget.write(f"Error communicating with server: {e}")
 
     def _recursive_build_tree(self, parent_node, data):
         for item in data:
@@ -74,7 +90,15 @@ class WorkflowUi(App):
     async def update_statuses(self) -> None:
         """Polls the server for status updates and refreshes the tree."""
         try:
-            statuses = self.workflow.get_nodes_status()
+            # Update button state based on overall workflow status
+            workflow_status = self.controller.get_workflow_status()
+            start_button = self.query_one("#start-button")
+            if workflow_status != 'not_started' and workflow_status != 'no_workflow_loaded':
+                start_button.disabled = True
+            else:
+                start_button.disabled = False
+
+            statuses = self.controller.get_nodes_status()
             tree = self.query_one(Tree)
 
             status_map = {
@@ -99,7 +123,6 @@ class WorkflowUi(App):
                     node_type = node_info['type']
 
                     if node_type == 'BNode':
-                        # Block nodes don't get a status icon
                         new_label = base_label
                     else:
                         icon = status_map.get(status, '❔')
@@ -120,18 +143,19 @@ class WorkflowUi(App):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
+        log_widget = self.query_one("#output-log")
         if event.button.id == "start-button":
             try:
-                self.workflow.run()
-                self.query_one("#output-log").write("Workflow start signal sent.")
+                result = self.controller.run()
+                log_widget.write(f"Server: {result}")
             except Exception as e:
-                self.query_one("#output-log").write(f"Error starting workflow: {e}")
+                log_widget.write(f"Error starting workflow: {e}")
         elif event.button.id == "stop-button":
             try:
-                self.workflow.stop()
-                self.query_one("#output-log").write("Workflow stop signal sent.")
+                result = self.controller.stop()
+                log_widget.write(f"Server: {result}")
             except Exception as e:
-                self.query_one("#output-log").write(f"Error stopping workflow: {e}")
+                log_widget.write(f"Error stopping workflow: {e}")
 
     async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """Handle tree node selection and start tailing the log."""
@@ -155,7 +179,7 @@ class WorkflowUi(App):
         offset = 0
         while self.is_running:
             try:
-                new_content, new_offset = self.workflow.tail_playbook_output(node_id, offset)
+                new_content, new_offset = self.controller.tail_playbook_output(node_id, offset)
                 if new_content:
                     log_widget.write(new_content)
                 offset = new_offset
@@ -165,18 +189,22 @@ class WorkflowUi(App):
                 break
 
 
-def main():
+def main(workflow_path, inventory_path):
     """Main function to run the TUI client."""
     try:
-        workflow_proxy = Pyro5.api.Proxy(f"PYRONAME:{PYRO_NAME}")
-        workflow_proxy._pyroBind()
+        controller_proxy = Pyro5.api.Proxy(f"PYRONAME:{PYRO_CONTROLLER_NAME}")
+        controller_proxy._pyroBind()
     except Exception as e:
         print(f"Error connecting to the server: {e}", file=sys.stderr)
-        print("Please ensure the server is running and a Pyro name server is active.", file=sys.stderr)
+        print("Please ensure the server is running.", file=sys.stderr)
         sys.exit(1)
 
-    app = WorkflowUi(workflow_proxy)
+    app = WorkflowUi(controller_proxy, workflow_path, inventory_path)
     app.run()
 
 if __name__ == "__main__":
-    main()
+    # This is for standalone testing if needed
+    if len(sys.argv) < 3:
+        print("Usage: python -m ansible_workflow.client <workflow_file> <inventory_file>")
+        sys.exit(1)
+    main(sys.argv[1], sys.argv[2])

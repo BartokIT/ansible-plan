@@ -26,26 +26,24 @@ def main():
     subparsers = parser.add_subparsers(dest='command', required=True, help='Sub-command help')
 
     # Server command
-    parser_server = subparsers.add_parser('server', help='Start the workflow server')
-    parser_server.add_argument('workflow', type=str, help='Workflow file')
-    parser_server.add_argument('-i', '--inventory', dest='inventory', required=True,
-                               help='specify inventory host path or comma separated host list.')
-    parser_server.add_argument('--log-dir', dest='log_dir', default='/tmp/ansible-workflows',
-                               help='set the parent output logging directory. defaults to /tmp/ansible-workflows')
+    parser_server = subparsers.add_parser('server', help='Start the workflow server (now runs as a generic daemon)')
 
     # Client command
     parser_client = subparsers.add_parser('client', help='Start the Textual UI client')
+    parser_client.add_argument('workflow', type=str, help='Workflow file to load and run.')
+    parser_client.add_argument('-i', '--inventory', dest='inventory', required=True,
+                               help='Specify inventory host path or comma separated host list.')
 
     args = parser.parse_args()
 
     if args.command == 'server':
-        check_file_existence(args.workflow, args.inventory)
         from ansible_workflow.server import start_server
-        start_server(args.workflow, args.inventory, args.log_dir)
+        start_server()
 
     elif args.command == 'client':
+        check_file_existence(args.workflow, args.inventory)
         from ansible_workflow.client import main as client_main
-        client_main()
+        client_main(args.workflow, args.inventory)
 
 if __name__ == "__main__":
     main()

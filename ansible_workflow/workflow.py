@@ -272,13 +272,15 @@ class AnsibleWorkflow():
 
     def run(self):
         if self.__running_statues != 'not_started':
-            raise Exception("Already running")
+            return f"Workflow cannot be started. Current status is '{self.__running_statues}'."
+
         self.__running_statues = 'started'
 
         # run the workflow in a separate thread
         run_thread = threading.Thread(target=self.__run_loop)
         run_thread.daemon = True
         run_thread.start()
+        return "Workflow started."
 
     def get_workflow_status(self):
         return self.__running_statues
