@@ -295,3 +295,29 @@ class AnsibleWorkflow():
                 return f.read()
         else:
             return "Output not available yet."
+
+    def tail_playbook_output(self, node_id, offset=0):
+        if node_id not in self.__data:
+            return "Node not found.", 0
+
+        node_obj = self.__data[node_id]['object']
+        if not isinstance(node_obj, PNode):
+            return "Not a playbook node.", 0
+
+        output_path = os.path.join(self.__logging_dir, str(node_id), 'stdout')
+
+        if os.path.exists(output_path):
+            try:
+                with open(output_path, 'r') as f:
+                    f.seek(0, os.SEEK_END)
+                    file_size = f.tell()
+                    if offset < file_size:
+                        f.seek(offset)
+                        new_content = f.read()
+                        return new_content, file_size
+                    else:
+                        return "", file_size
+            except Exception as e:
+                return f"Error reading file: {e}", offset
+        else:
+            return "", 0

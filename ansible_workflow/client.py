@@ -6,6 +6,7 @@ from textual.containers import Horizontal, Vertical
 from textual import work
 import sys
 import os
+import asyncio
 
 # The name of the Pyro object registered on the name server
 PYRO_NAME = "ansible.workflow"
@@ -25,6 +26,7 @@ class WorkflowUi(App):
         self.workflow = workflow_proxy
         self.polling_timer = None
         self.spinner_cycle = cycle(["⏳", "⌛"])
+        self.log_stream_worker = None
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
@@ -121,20 +123,36 @@ class WorkflowUi(App):
             except Exception as e:
                 self.query_one("#output-log").write(f"Error stopping workflow: {e}")
 
-    @work(exclusive=True)
     async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
-        """Handle tree node selection and fetch output."""
-        node_id = event.node.data['id']
+        """Handle tree node selection and start tailing the log."""
+        if self.log_stream_worker:
+            self.log_stream_worker.cancel()
+
+        node_id = event.node.data.get('id')
+        if not node_id or node_id == 'root':
+            return
+
         log_widget = self.query_one("#output-log")
         log_widget.clear()
-        log_widget.write(f"Fetching output for {node_id}...")
-        try:
-            output = self.workflow.get_playbook_output(node_id)
-            log_widget.clear()
-            log_widget.write(f"--- Output for {node_id} ---\n")
-            log_widget.write(output)
-        except Exception as e:
-            log_widget.write(f"\nError fetching output: {e}")
+        log_widget.write(f"--- Tailing output for {event.node.label} ---")
+
+        self.log_stream_worker = self.stream_log(node_id)
+
+    @work(exclusive=True)
+    async def stream_log(self, node_id: str) -> None:
+        """Worker to stream log output for a node."""
+        log_widget = self.query_one("#output-log")
+        offset = 0
+        while self.is_running:
+            try:
+                new_content, new_offset = self.workflow.tail_playbook_output(node_id, offset)
+                if new_content:
+                    log_widget.write(new_content)
+                offset = new_offset
+                await asyncio.sleep(1)
+            except Exception as e:
+                log_widget.write(f"\nError tailing log: {e}")
+                break
 
 
 def main():
