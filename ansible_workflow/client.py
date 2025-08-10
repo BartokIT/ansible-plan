@@ -78,12 +78,12 @@ class WorkflowUi(App):
             tree = self.query_one(Tree)
 
             status_map = {
-                'not_started': "[ ]",
-                'running': f"[[yellow]{next(self.spinner_cycle)}[/yellow]]",
-                'ended': "[[green]✔[/green]]",
-                'failed': "[[red]✖[/red]]",
-                'stopped': "[[orange]S[/orange]]",
-                'skipped': "[[grey]][-][/grey]]",
+                'not_started': "\\[ ]",
+                'running': f"\\[[yellow]{next(self.spinner_cycle)}[/yellow]\\]",
+                'ended': "\\[[green]✔[/green]\\]",
+                'failed': "\\[[red]✖[/red]\\]",
+                'stopped': "\\[[orange]S[/orange]\\]",
+                'skipped': "\\[[grey]-[/grey]\\]",
             }
 
             def update_node_label(node):
