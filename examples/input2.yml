@@ -2,16 +2,16 @@
 - id: 1
   block:
     - id: 1.1
-      import_playbook: playbooks/first.yml
+      import_playbook: examples/playbooks/first.yml
     - id: 1.2
-      import_playbook: playbooks/second.yml
+      import_playbook: examples/playbooks/second.yml
 
 - id: 2
-  import_playbook: playbooks/failing_play.yml
+  import_playbook: examples/playbooks/failing_play.yml
 
 - id: 3
   block:
     - id: 3.1
-      import_playbook: playbooks/third.yml
+      import_playbook: examples/playbooks/third.yml
     - id: 3.2
-      import_playbook: playbooks/fourth.yml
+      import_playbook: examples/playbooks/fourth.yml
