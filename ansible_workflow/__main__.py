@@ -26,33 +26,42 @@ def check_file_existence(workflow, inventories):
 def is_server_running():
     """Check if the Pyro5 server is running by trying to connect."""
     try:
-        # Use a timeout to avoid waiting forever
         with Pyro5.api.Proxy(f"PYRONAME:{PYRO_CONTROLLER_NAME}") as proxy:
             proxy._pyroTimeout = 2
             proxy._pyroBind()
         return True
-    except Pyro5.errors.CommunicationError:
-        # This is expected if the server is not running
-        return False
-    except Pyro5.errors.NamingError:
-        # This is expected if the name server is not running (and thus the server is not)
+    except (Pyro5.errors.CommunicationError, Pyro5.errors.NamingError):
         return False
 
 def launch_daemonized_server():
-    """Launch the server process as a background daemon."""
+    """Fork the current process and launch the server in a detached daemon."""
     print("Backend server not found. Starting it now...")
-    # Using python-daemon to fork the process
-    # We need to ensure that stdout/stderr are handled, e.g., redirected to a log file.
-    # For simplicity, we'll let the daemon library handle it.
-    context = daemon.DaemonContext(
-        working_directory=os.getcwd(),
-        # For debugging, you might want to redirect stdout/stderr to files
-        # stdout=open('daemon_stdout.log', 'w+'),
-        # stderr=open('daemon_stderr.log', 'w+'),
-    )
+    try:
+        pid = os.fork()
+        if pid > 0:
+            # Parent process: we are done here, just return.
+            return
 
-    with context:
-        start_server()
+        # Child process: become the daemon.
+        # The DaemonContext will fork a second time and detach.
+        context = daemon.DaemonContext(
+            working_directory=os.getcwd(),
+            # Redirect streams to /dev/null, a real app would use log files.
+            stdout=open(os.devnull, 'w+'),
+            stderr=open(os.devnull, 'w+'),
+        )
+
+        with context:
+            start_server()
+
+        # The child process that creates the daemon exits here.
+        # The grandchild (the actual daemon) continues running start_server().
+        os._exit(0)
+
+    except OSError as e:
+        print(f"Failed to fork daemon: {e}", file=sys.stderr)
+        sys.exit(1)
+
 
 def main():
     parser = argparse.ArgumentParser(description='Ansible Workflow runner.')
@@ -65,7 +74,7 @@ def main():
 
     if not is_server_running():
         launch_daemonized_server()
-        # Give the server a moment to start up and register itself
+        print("Waiting for server to initialize...")
         time.sleep(3)
         if not is_server_running():
             print("Failed to start the backend server. Please check logs for details.", file=sys.stderr)

@@ -172,6 +172,15 @@ class WorkflowUi(App):
 
         self.log_stream_worker = self.stream_log(node_id)
 
+    async def action_quit(self) -> None:
+        """Custom quit action to notify the server."""
+        try:
+            self.controller.request_shutdown()
+        except Pyro5.errors.CommunicationError:
+            # Server may have already shut down, which is fine.
+            pass
+        self.exit()
+
     @work(exclusive=False)
     async def stream_log(self, node_id: str) -> None:
         """Worker to stream log output for a node."""

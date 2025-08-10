@@ -13,6 +13,7 @@ PYRO_CONTROLLER_NAME = "ansible.workflow.controller"
 class WorkflowController:
     def __init__(self):
         self.workflow = None
+        self.daemon = None # Set by start_server
         self.log_dir_base = "/tmp/ansible-workflows"
         if not os.path.exists(self.log_dir_base):
             os.makedirs(self.log_dir_base)
@@ -66,6 +67,14 @@ class WorkflowController:
             return "No workflow loaded.", 0
         return self.workflow.tail_playbook_output(node_id, offset)
 
+    @Pyro5.api.oneway
+    def request_shutdown(self):
+        """Request the server to shut down if the workflow is complete."""
+        if self.workflow and self.workflow.get_workflow_status() in ['ended', 'failed', 'stopped']:
+            print("Workflow finished and client exited. Shutting down server.")
+            # Run shutdown in a new thread to allow the oneway call to complete
+            threading.Thread(target=self.daemon.shutdown, daemon=True).start()
+
 
 def start_server():
     print("Starting Pyro name server in background...")
@@ -79,6 +88,7 @@ def start_server():
     ns = Pyro5.api.locate_ns()
 
     controller = WorkflowController()
+    controller.daemon = daemon  # Give the controller a reference to the daemon
     uri = daemon.register(controller)
     ns.register(PYRO_CONTROLLER_NAME, uri)
 
