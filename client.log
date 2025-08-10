@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/home/jules/.pyenv/versions/3.12.11/bin/ansible-workflow", line 8, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/app/ansible_workflow/__main__.py", line 47, in main
+    from ansible_workflow.client import main as client_main
+  File "/app/ansible_workflow/client.py", line 1, in <module>
+    import Pyro5.api
+ModuleNotFoundError: No module named 'Pyro5'
