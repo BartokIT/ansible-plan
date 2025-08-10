@@ -9,6 +9,7 @@ import string
 import os
 import time
 from datetime import datetime
+import threading
 
 
 class Node():
@@ -70,10 +71,14 @@ class PNode(Node):
                                                                 extravars=self.__extravars,  quiet=True)
 
 
+import Pyro5.api
+
+
 def nudge(pos, x_shift, y_shift):
     return {n:(x + x_shift, y + y_shift) for n,(x,y) in pos.items()}
 
 
+@Pyro5.api.expose
 class AnsibleWorkflow():
     def __init__(self, workflow, inventory, logging_dir):
         self.__graph = nx.DiGraph()
@@ -82,6 +87,7 @@ class AnsibleWorkflow():
         self.__inventory_filename = inventory
         self.__running_nodes = ['s']
         self.__running_statues = 'not_started'
+        self.__stop_requested = False
         self.__logging_dir = logging_dir
         self.__data = dict()
 
@@ -232,12 +238,86 @@ class AnsibleWorkflow():
                 self.__data[node_id]['ended'] = datetime.now()
                 self.__running_nodes.remove(node_id)
 
+    def stop(self):
+        self.__stop_requested = True
+
+    def __run_loop(self):
+        # loop over nodes
+        while len(self.__running_nodes) and not self.__stop_requested:
+            self.__run_step()
+            time.sleep(1)
+
+        if self.__stop_requested:
+            self.__running_statues = 'stopped'
+        else:
+            self.__running_statues = 'ended'
+
     def run(self):
         if self.__running_statues != 'not_started':
             raise Exception("Already running")
         self.__running_statues = 'started'
-        # loop over nodes
-        while len(self.__running_nodes):
-            self.__run_step()
-            time.sleep(1)
-        self.__running_statues = 'ended'
+
+        # run the workflow in a separate thread
+        run_thread = threading.Thread(target=self.__run_loop)
+        run_thread.daemon = True
+        run_thread.start()
+
+    def get_workflow_status(self):
+        return self.__running_statues
+
+    def get_nodes_status(self):
+        statuses = {}
+        for node_id, data in self.__data.items():
+            node_obj = data['object']
+            status = node_obj.get_status()
+            statuses[node_id] = {
+                'status': status,
+                'started': data.get('started', None),
+                'ended': data.get('ended', None),
+            }
+        return statuses
+
+    def get_playbook_output(self, node_id):
+        if node_id not in self.__data:
+            return "Node not found."
+
+        node_obj = self.__data[node_id]['object']
+        if not isinstance(node_obj, PNode):
+            return "Not a playbook node."
+
+        # ansible-runner saves stdout in artifact_dir/ident/stdout
+        # PNode is initialized with artifact_dir and ident is the node_id
+        # So the path is logging_dir/node_id/stdout
+        output_path = os.path.join(self.__logging_dir, str(node_id), 'stdout')
+
+        if os.path.exists(output_path):
+            with open(output_path, 'r') as f:
+                return f.read()
+        else:
+            return "Output not available yet."
+
+    def tail_playbook_output(self, node_id, offset=0):
+        if node_id not in self.__data:
+            return "Node not found.", 0
+
+        node_obj = self.__data[node_id]['object']
+        if not isinstance(node_obj, PNode):
+            return "Not a playbook node.", 0
+
+        output_path = os.path.join(self.__logging_dir, str(node_id), 'stdout')
+
+        if os.path.exists(output_path):
+            try:
+                with open(output_path, 'r') as f:
+                    f.seek(0, os.SEEK_END)
+                    file_size = f.tell()
+                    if offset < file_size:
+                        f.seek(offset)
+                        new_content = f.read()
+                        return new_content, file_size
+                    else:
+                        return "", file_size
+            except Exception as e:
+                return f"Error reading file: {e}", offset
+        else:
+            return "", 0
