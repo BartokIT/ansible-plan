@@ -92,9 +92,5 @@ def start_server():
         ns.remove(PYRO_CONTROLLER_NAME)
         daemon.shutdown()
 
-def main():
-    # This main is for standalone execution for testing
-    start_server()
-
-if __name__ == "__main__":
-    main()
+# The main entry point is now in __main__.py
+# The old main() function is removed to avoid confusion.
