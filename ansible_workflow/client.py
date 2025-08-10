@@ -79,11 +79,11 @@ class WorkflowUi(App):
 
             status_map = {
                 'not_started': "\\[ ]",
-                'running': f"\\[[yellow]{next(self.spinner_cycle)}[/yellow]\\]",
-                'ended': "\\[[green]✔[/green]\\]",
-                'failed': "\\[[red]✖[/red]\\]",
-                'stopped': "\\[[orange]S[/orange]\\]",
-                'skipped': "\\[[grey]-[/grey]\\]",
+                'running': f"\\[[yellow]{next(self.spinner_cycle)}[/yellow]]",
+                'ended': "\\[[green]✔[/green]]",
+                'failed': "\\[[red]✖[/red]]",
+                'stopped': "\\[[orange]S[/orange]]",
+                'skipped': "\\[[grey]-[/grey]]",
             }
 
             def update_node_label(node):
