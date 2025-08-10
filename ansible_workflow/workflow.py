@@ -9,6 +9,7 @@ import string
 import os
 import time
 from datetime import datetime
+import threading
 
 
 class Node():
@@ -26,13 +27,8 @@ class Node():
     def __hash__(self):
         return hash(self.__id)
 
-    @abc.abstractmethod
-    def get_status(self):
-        return 'ended'
-
 class BNode(Node):
-    def get_status(self):
-        return 'ended'
+    pass
 
 class PNode(Node):
     def __init__(self, id, playbook, inventory, artifact_dir, extravars={}):
@@ -70,10 +66,14 @@ class PNode(Node):
                                                                 extravars=self.__extravars,  quiet=True)
 
 
+import Pyro5.api
+
+
 def nudge(pos, x_shift, y_shift):
     return {n:(x + x_shift, y + y_shift) for n,(x,y) in pos.items()}
 
 
+@Pyro5.api.expose
 class AnsibleWorkflow():
     def __init__(self, workflow, inventory, logging_dir):
         self.__graph = nx.DiGraph()
@@ -82,6 +82,7 @@ class AnsibleWorkflow():
         self.__inventory_filename = inventory
         self.__running_nodes = ['s']
         self.__running_statues = 'not_started'
+        self.__stop_requested = False
         self.__logging_dir = logging_dir
         self.__data = dict()
 
@@ -180,7 +181,11 @@ class AnsibleWorkflow():
 
             # the node specification is added
             self.__graph.add_node(gnode_id)
-            self.__data[gnode_id]=dict(object=gnode)
+            self.__data[gnode_id] = {
+                'object': gnode,
+                'status': 'not_started',
+                'type': 'BNode' if 'block' in inode else 'PNode'
+            }
 
 
             if 'block' not in inode:
@@ -205,39 +210,136 @@ class AnsibleWorkflow():
         in_edges = self.__graph.in_edges(node_id)
         for edge in in_edges:
             previous_node = edge[0]
-            #print("\tPrevious node %s status: %s" % (previous_node, self.__graph.nodes[previous_node]['data'].get_status()))
-            if self.__data[previous_node]['object'].get_status() != 'ended':
+            # Use the canonical status from __data
+            if self.__data[previous_node]['status'] != 'ended':
                 return False
         return True
 
+    def _mark_successors_as_skipped(self, failed_node_id):
+        """Find all successors of a failed node and mark them as skipped."""
+        for descendant in nx.descendants(self.__graph, failed_node_id):
+            if self.__data[descendant]['status'] == 'not_started':
+                self.__data[descendant]['status'] = 'skipped'
+
     def __run_step(self):
-        for node_id in self.__running_nodes:
-            node = self.__data[node_id]['object']
-            # if current node is ended search for next nodes
-            if node.get_status() == 'ended':
+        # Use a copy of the list to avoid issues with modifying it while iterating
+        for node_id in list(self.__running_nodes):
+            node_data = self.__data[node_id]
+            node = node_data['object']
+
+            # For Block nodes, we just need to check if they can be considered 'ended'
+            # which happens once all their predecessors are done.
+            if node_data['type'] == 'BNode':
+                node_data['status'] = 'ended'
+                # Continue to the next part of the logic to find successors
+            else: # PNode
+                live_status = node.get_status()
+                node_data['status'] = live_status
+
+            # if current node is ended, search for next nodes
+            if node_data['status'] == 'ended':
                 self.__running_nodes.remove(node_id)
-                self.__data[node_id]['ended'] = datetime.now()
+                node_data['ended'] = datetime.now()
                 for out_edge in self.__graph.out_edges(node_id):
                     next_node_id = out_edge[1]
-                    next_node = self.__data[next_node_id]['object']
                     if self.__is_node_runnable(next_node_id):
-                        #print("Run node %s" % next_node_id)
                         self.__running_nodes.append(next_node_id)
-                        if isinstance(next_node , PNode):
-                            self.__data[next_node_id]['started'] = datetime.now()
+                        next_node_data = self.__data[next_node_id]
+                        next_node = next_node_data['object']
+                        if next_node_data['type'] == 'PNode':
+                            next_node_data['status'] = 'running'
+                            next_node_data['started'] = datetime.now()
                             next_node.run()
-            elif node.get_status() == 'failed':
-                # just remove a failed node
-                #print("Failed node %s" % node_id)
-                self.__data[node_id]['ended'] = datetime.now()
+
+            elif node_data['status'] == 'failed':
                 self.__running_nodes.remove(node_id)
+                node_data['ended'] = datetime.now()
+                self._mark_successors_as_skipped(node_id)
+
+    def stop(self):
+        self.__stop_requested = True
+
+    def __run_loop(self):
+        # loop over nodes
+        while len(self.__running_nodes) and not self.__stop_requested:
+            self.__run_step()
+            time.sleep(1)
+
+        if self.__stop_requested:
+            self.__running_statues = 'stopped'
+        else:
+            self.__running_statues = 'ended'
 
     def run(self):
         if self.__running_statues != 'not_started':
             raise Exception("Already running")
         self.__running_statues = 'started'
-        # loop over nodes
-        while len(self.__running_nodes):
-            self.__run_step()
-            time.sleep(1)
-        self.__running_statues = 'ended'
+
+        # run the workflow in a separate thread
+        run_thread = threading.Thread(target=self.__run_loop)
+        run_thread.daemon = True
+        run_thread.start()
+
+    def get_workflow_status(self):
+        return self.__running_statues
+
+    def get_nodes_status(self):
+        statuses = {}
+        # Make sure the status of running nodes is up-to-date
+        for node_id in self.__running_nodes:
+            if self.__data[node_id]['type'] == 'PNode':
+                self.__data[node_id]['status'] = self.__data[node_id]['object'].get_status()
+
+        for node_id, data in self.__data.items():
+            statuses[node_id] = {
+                'status': data['status'],
+                'type': data['type'],
+                'started': data.get('started', None),
+                'ended': data.get('ended', None),
+            }
+        return statuses
+
+    def get_playbook_output(self, node_id):
+        if node_id not in self.__data:
+            return "Node not found."
+
+        node_obj = self.__data[node_id]['object']
+        if not isinstance(node_obj, PNode):
+            return "Not a playbook node."
+
+        # ansible-runner saves stdout in artifact_dir/ident/stdout
+        # PNode is initialized with artifact_dir and ident is the node_id
+        # So the path is logging_dir/node_id/stdout
+        output_path = os.path.join(self.__logging_dir, str(node_id), 'stdout')
+
+        if os.path.exists(output_path):
+            with open(output_path, 'r') as f:
+                return f.read()
+        else:
+            return "Output not available yet."
+
+    def tail_playbook_output(self, node_id, offset=0):
+        if node_id not in self.__data:
+            return "Node not found.", 0
+
+        node_obj = self.__data[node_id]['object']
+        if not isinstance(node_obj, PNode):
+            return "Not a playbook node.", 0
+
+        output_path = os.path.join(self.__logging_dir, str(node_id), 'stdout')
+
+        if os.path.exists(output_path):
+            try:
+                with open(output_path, 'r') as f:
+                    f.seek(0, os.SEEK_END)
+                    file_size = f.tell()
+                    if offset < file_size:
+                        f.seek(offset)
+                        new_content = f.read()
+                        return new_content, file_size
+                    else:
+                        return "", file_size
+            except Exception as e:
+                return f"Error reading file: {e}", offset
+        else:
+            return "", 0

@@ -3,3 +3,5 @@ ansible-runner
 matplotlib
 graphviz
 pygraphviz
+textual
+Pyro5

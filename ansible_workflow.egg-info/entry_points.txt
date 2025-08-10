@@ -1,0 +1,2 @@
+[console_scripts]
+ansible-workflow = ansible_workflow.__main__:main
