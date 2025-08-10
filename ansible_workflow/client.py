@@ -83,18 +83,23 @@ class WorkflowUi(App):
                 'stopped': "🛑",
             }
 
-            for node in tree.nodes.values():
+            def update_node_label(node):
                 if not hasattr(node, 'data') or node.data is None or 'id' not in node.data:
-                    continue
+                    return
 
-                node_id = node.data['id']
-                base_label = node.data['label']
+                node_id = node.data.get('id')
+                base_label = node.data.get('label')
 
-                if node_id in statuses:
+                if node_id and base_label and node_id in statuses:
                     status = statuses[node_id]['status']
                     icon = status_map.get(status, '❔')
                     new_label = f"{icon} {base_label}"
                     node.set_label(new_label)
+
+                for child_node in node.children:
+                    update_node_label(child_node)
+
+            update_node_label(tree.root)
 
         except Exception as e:
             if self.polling_timer:

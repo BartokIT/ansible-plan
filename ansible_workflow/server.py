@@ -1,7 +1,9 @@
 import Pyro5.api
+import Pyro5.nameserver
 import sys
 import threading
 import os
+import time
 from .workflow import AnsibleWorkflow
 from datetime import datetime
 
@@ -12,7 +14,13 @@ def start_server(workflow_path, inventory_path, log_dir_base):
 
     logging_dir = "%s/%s_%s" % (log_dir_base, os.path.basename(workflow_path), datetime.now().strftime("%Y%m%d_%H%M%S"))
 
-    print(f"Starting server for workflow: {workflow_path}")
+    print("Starting Pyro name server in background...")
+    ns_thread = threading.Thread(target=Pyro5.nameserver.start_ns_loop)
+    ns_thread.daemon = True
+    ns_thread.start()
+    time.sleep(1) # Give the name server a moment to start
+
+    print(f"Starting workflow server for: {workflow_path}")
     print(f"Logging to: {logging_dir}")
 
     # We need a daemon to listen for requests
