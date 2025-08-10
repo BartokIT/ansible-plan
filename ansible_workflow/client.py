@@ -70,7 +70,7 @@ class WorkflowUi(App):
                 label = item.get('name', playbook_name)
                 new_node = parent_node.add_leaf(label, data={'id': node_id, 'label': label})
 
-    @work(exclusive=True)
+    @work(exclusive=False)
     async def update_statuses(self) -> None:
         """Polls the server for status updates and refreshes the tree."""
         try:
