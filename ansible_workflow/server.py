@@ -72,6 +72,29 @@ class WorkflowController:
             return "No workflow loaded.", 0
         return self.workflow.tail_playbook_output(node_id, offset)
 
+    def get_node_details(self, node_id):
+        if not self.workflow:
+            return {}
+        # The data dict in workflow contains all info
+        node_data = self.workflow.get_node_datas().get(node_id, {})
+        # We only need to return the serializable parts
+        return {
+            'status': node_data.get('status'),
+            'type': node_data.get('type'),
+            'details': node_data.get('details'),
+            'started': node_data.get('started'),
+            'ended': node_data.get('ended'),
+        }
+
+    def restart_workflow(self):
+        """Resets the controller to a state with no workflow loaded."""
+        if self.workflow and self.workflow.get_workflow_status() in ['running']:
+            return "Cannot restart while workflow is running."
+
+        print("Restarting workflow. Clearing current state.")
+        self.workflow = None
+        return "Workflow cleared. Ready to load a new one."
+
     @Pyro5.api.oneway
     def request_shutdown(self):
         """Request the server to shut down if the workflow is complete."""

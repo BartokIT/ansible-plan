@@ -1,25 +1,48 @@
+#header-container {
+    dock: top;
+    height: 3;
+    content-align: center middle;
+    background: $panel;
+}
+
+#header-container Button {
+    width: 15;
+    margin: 0 1;
+}
+
+#main-container {
+    height: 1fr;
+    overflow: hidden;
+}
+
 #tree-container {
     width: 30%;
     height: 100%;
     border-right: solid $accent;
+    overflow-y: auto;
 }
 
-#main-container {
+#right-pane {
     width: 70%;
     height: 100%;
 }
 
-#buttons-container {
-    height: auto;
+#details-container {
+    height: 40%;
+    border-bottom: solid $accent;
     padding: 1;
-    align: center middle;
+    overflow-y: auto;
+}
+
+#log-container {
+    height: 60%;
+    overflow: hidden;
 }
 
 #output-log {
-    border-top: solid $accent;
     height: 100%;
 }
 
-#start-button, #stop-button {
-    width: 50%;
+StatusBar {
+    dock: bottom;
 }

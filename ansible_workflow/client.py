@@ -1,15 +1,47 @@
 import Pyro5.api
 from itertools import cycle
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Tree, Log, Button
+from textual.widgets import Header, Tree, Log, Button, Static, StatusBar
 from textual.containers import Horizontal, Vertical
 from textual import work
 import sys
 import os
 import asyncio
+from rich.pretty import Pretty
 
 # The name of the Pyro object registered on the name server
 PYRO_CONTROLLER_NAME = "ansible.workflow.controller"
+
+
+class NodeDetails(Static):
+    """A widget to display details of the selected node."""
+    def update_details(self, details: dict):
+        if not details:
+            self.update("Select a node to see details.")
+            return
+
+        node_type = details.get('type')
+        if node_type == 'PNode':
+            # Display playbook details
+            text = (
+                f"[bold]Playbook Node:[/bold] {details.get('details', {}).get('playbook', 'N/A')}\n"
+                f"[bold]Status:[/bold] {details.get('status', 'N/A')}\n"
+                f"[bold]Inventory:[/bold] {details.get('details', {}).get('inventory', 'N/A')}\n"
+                f"[bold]Started:[/bold] {details.get('started', 'N/A')}\n"
+                f"[bold]Ended:[/bold] {details.get('ended', 'N/A')}\n\n"
+                f"[bold]Extra Vars:[/bold]\n{Pretty(details.get('details', {}).get('extravars', {}))}"
+            )
+            self.update(text)
+        elif node_type == 'BNode':
+            # Display block details
+            text = (
+                f"[bold]Block Node[/bold]\n"
+                f"[bold]Strategy:[/bold] {details.get('details', {}).get('strategy', 'N/A')}"
+            )
+            self.update(text)
+        else:
+            self.update("Select a node to see details.")
+
 
 class WorkflowUi(App):
     """A Textual app to manage and monitor Ansible workflows."""
@@ -32,31 +64,34 @@ class WorkflowUi(App):
 
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
-        yield Header()
-        with Horizontal():
+        with Horizontal(id="header-container"):
+            yield Button("Start", id="start-button", variant="success")
+            yield Button("Restart", id="restart-button", variant="primary")
+            yield Button("Stop", id="stop-button", variant="error")
+
+        with Horizontal(id="main-container"):
             with Vertical(id="tree-container"):
                 yield Tree("Workflow", id="workflow-tree", data={'id': 'root', 'label': 'Workflow'})
-            with Vertical(id="main-container"):
-                with Horizontal(id="buttons-container"):
-                    yield Button("Start Workflow", id="start-button", variant="success")
-                    yield Button("Stop Workflow", id="stop-button", variant="error")
-                yield Log(id="output-log", auto_scroll=True)
-        yield Footer()
+            with Vertical(id="right-pane"):
+                with Vertical(id="details-container"):
+                    yield NodeDetails("Select a node to see details.")
+                with Vertical(id="log-container"):
+                    yield Log(id="output-log", auto_scroll=True)
+        yield StatusBar()
 
     def on_mount(self) -> None:
         """Called when app is mounted."""
+        self.status_bar.update("Loading workflow...")
         self.load_workflow_and_build_tree()
         self.polling_timer = self.set_interval(1, self.update_statuses)
 
     @work(exclusive=True)
     async def load_workflow_and_build_tree(self) -> None:
         """Loads the workflow on the server and builds the initial tree."""
-        log_widget = self.query_one("#output-log")
-        log_widget.write("Loading workflow on server...")
         try:
             result = self.controller.load_workflow(self.workflow_path, self.inventory_path)
-            log_widget.write(f"Server: {result}")
-            if "Error" in result:
+            self.status_bar.update(result)
+            if "Error" in result and "Reconnected" not in result:
                 self.query_one("#start-button").disabled = True
                 return
 
@@ -64,33 +99,32 @@ class WorkflowUi(App):
             tree.clear()
             workflow_data = self.controller.get_input_data()
             if not workflow_data:
-                log_widget.write("Failed to get workflow data from server.")
+                self.status_bar.update("Error: Failed to get workflow data from server.")
                 return
             actual_workflow = workflow_data[1:-1] # Skip 's' and 'e' nodes
             self._recursive_build_tree(tree.root, actual_workflow)
-            tree.root.expand()
-            log_widget.write("Workflow tree built.")
+            tree.root.expand_all() # Expand all nodes as requested
+            self.status_bar.update("Workflow tree built. Ready to start.")
 
         except Exception as e:
-            log_widget.write(f"Error communicating with server: {e}")
+            self.status_bar.update(f"Error: {e}")
 
     def _recursive_build_tree(self, parent_node, data):
         for item in data:
             node_id = item['id']
             if 'block' in item:
                 label = item.get('name', f"Block: {node_id}")
-                new_node = parent_node.add(label, data={'id': node_id, 'label': label})
+                new_node = parent_node.add(label, data={'id': node_id, 'label': label, 'type': 'BNode'})
                 self._recursive_build_tree(new_node, item['block'])
             else:
                 playbook_name = os.path.basename(item.get('import_playbook', 'Unknown Playbook'))
                 label = item.get('name', playbook_name)
-                new_node = parent_node.add_leaf(label, data={'id': node_id, 'label': label})
+                new_node = parent_node.add_leaf(label, data={'id': node_id, 'label': label, 'type': 'PNode'})
 
     @work(exclusive=False)
     async def update_statuses(self) -> None:
         """Polls the server for status updates and refreshes the tree."""
         try:
-            # Update button state based on overall workflow status
             workflow_status = self.controller.get_workflow_status()
             start_button = self.query_one("#start-button")
             if workflow_status != 'not_started' and workflow_status != 'no_workflow_loaded':
@@ -136,26 +170,35 @@ class WorkflowUi(App):
 
             update_node_label(tree.root)
 
-        except Exception as e:
+        except Exception:
+            # Polling might fail if server shuts down, just stop the timer
             if self.polling_timer:
                 self.polling_timer.stop()
-            self.query_one("#output-log").write(f"Error updating statuses: {e}\nPolling stopped.")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
-        log_widget = self.query_one("#output-log")
         if event.button.id == "start-button":
             try:
                 result = self.controller.run()
-                log_widget.write(f"Server: {result}")
+                self.status_bar.update(f"Server: {result}")
             except Exception as e:
-                log_widget.write(f"Error starting workflow: {e}")
+                self.status_bar.update(f"Error starting workflow: {e}")
         elif event.button.id == "stop-button":
             try:
                 result = self.controller.stop()
-                log_widget.write(f"Server: {result}")
+                self.status_bar.update(f"Server: {result}")
             except Exception as e:
-                log_widget.write(f"Error stopping workflow: {e}")
+                self.status_bar.update(f"Error stopping workflow: {e}")
+        elif event.button.id == "restart-button":
+            try:
+                result = self.controller.restart_workflow()
+                self.status_bar.update(f"Server: {result}")
+                # After restarting, clear the log and details and reload the workflow
+                self.query_one("#output-log").clear()
+                self.query_one(NodeDetails).update_details({})
+                self.load_workflow_and_build_tree()
+            except Exception as e:
+                self.status_bar.update(f"Error restarting workflow: {e}")
 
     async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """Handle tree node selection and start tailing the log."""
@@ -164,20 +207,28 @@ class WorkflowUi(App):
 
         node_id = event.node.data.get('id')
         if not node_id or node_id == 'root':
+            self.query_one(NodeDetails).update_details({})
             return
 
+        # Update details panel
+        details = self.controller.get_node_details(node_id)
+        self.query_one(NodeDetails).update_details(details)
+
+        # Update log panel
         log_widget = self.query_one("#output-log")
         log_widget.clear()
-        log_widget.write(f"--- Tailing output for {event.node.label} ---")
 
-        self.log_stream_worker = self.stream_log(node_id)
+        if event.node.data.get('type') == 'PNode':
+            log_widget.write(f"--- Tailing output for {event.node.label} ---")
+            self.log_stream_worker = self.stream_log(node_id)
+        else: # BNode
+            log_widget.write("No output for Block nodes.")
 
     async def action_quit(self) -> None:
         """Custom quit action to notify the server."""
         try:
             self.controller.request_shutdown()
         except Pyro5.errors.CommunicationError:
-            # Server may have already shut down, which is fine.
             pass
         self.exit()
 
@@ -193,8 +244,8 @@ class WorkflowUi(App):
                     log_widget.write(new_content)
                 offset = new_offset
                 await asyncio.sleep(1)
-            except Exception as e:
-                log_widget.write(f"\nError tailing log: {e}")
+            except Exception:
+                # Log might have been cancelled, or server shut down
                 break
 
 
@@ -212,7 +263,6 @@ def main(workflow_path, inventory_path):
     app.run()
 
 if __name__ == "__main__":
-    # This is for standalone testing if needed
     if len(sys.argv) < 3:
         print("Usage: python -m ansible_workflow.client <workflow_file> <inventory_file>")
         sys.exit(1)

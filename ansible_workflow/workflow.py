@@ -168,14 +168,22 @@ class AnsibleWorkflow():
                     self.__graph.add_edge(zero_outdegree_node.get_id(), gnode_id)
                 zero_outdegree_nodes = []
 
+            node_details = {}
             # generate the object representing the graph
             if 'block' in inode:
                 gnode = BNode(gnode_id)
-                block_sub_nodes = self._import_nodes(inode['block'], [gnode,], inode.get('strategy','parallel'))
+                strategy = inode.get('strategy','parallel')
+                node_details = {'strategy': strategy}
+                block_sub_nodes = self._import_nodes(inode['block'], [gnode,], strategy)
             else:
                 playbook=os.path.abspath(inode['import_playbook'])
                 inventory=os.path.abspath(inode.get('inventory', self.__inventory_filename))
                 extravars=inode.get('vars', {})
+                node_details = {
+                    'playbook': playbook,
+                    'inventory': inventory,
+                    'extravars': extravars,
+                }
                 gnode = PNode(gnode_id, playbook=playbook, inventory=inventory, artifact_dir=self.__logging_dir, extravars=extravars)
                 print("     %s node: %s       playbook: %s     inventory: %s    vars: %s" % (indentation, gnode_id, playbook, inventory, extravars))
 
@@ -184,7 +192,8 @@ class AnsibleWorkflow():
             self.__data[gnode_id] = {
                 'object': gnode,
                 'status': 'not_started',
-                'type': 'BNode' if 'block' in inode else 'PNode'
+                'type': 'BNode' if 'block' in inode else 'PNode',
+                'details': node_details,
             }
 
 
