@@ -296,11 +296,8 @@ class AnsibleWorkflow():
 
     def get_nodes_status(self):
         statuses = {}
-        # Make sure the status of running nodes is up-to-date
-        for node_id in self.__running_nodes:
-            if self.__data[node_id]['type'] == 'PNode':
-                self.__data[node_id]['status'] = self.__data[node_id]['object'].get_status()
-
+        # This method is now read-only. The __run_loop is the single source of truth for status changes.
+        # This prevents race conditions between the workflow thread and pyro daemon threads.
         for node_id, data in self.__data.items():
             statuses[node_id] = {
                 'status': data['status'],
