@@ -1,17 +1,16 @@
-#!/bin/env python3
-import ansible_runner
 import networkx as nx
-from numpy import e
 import yaml
 import matplotlib.pyplot as plt
+import ansible_runner
+import abc
+import inspect
 import random
 import string
-import inspect
-import abc
-import time
 import os
-import copy
-import curses
+import time
+from datetime import datetime
+import threading
+
 
 class Node():
     __metaclass__ = abc.ABCMeta
@@ -37,11 +36,12 @@ class BNode(Node):
         return 'ended'
 
 class PNode(Node):
-    def __init__(self, id, playbook, inventory, extravars={}):
+    def __init__(self, id, playbook, inventory, artifact_dir, extravars={}):
         super(PNode, self).__init__(id)
         self.__playbook = playbook
         self.__inventory = inventory
         self.__extravars = extravars
+        self.__artifact_dir = artifact_dir
         self.__thread = None
         self.__runner = None
 
@@ -64,20 +64,32 @@ class PNode(Node):
         return self.__playbook
 
     def run(self):
-        self.__thread, self.__runner = ansible_runner.run_async(playbook=self.__playbook, inventory=self.__inventory, extravars=self.__extravars,  quiet=True)
+        self.__thread, self.__runner = ansible_runner.run_async(playbook=self.__playbook,
+                                                                inventory=self.__inventory,
+                                                                ident=self.get_id(),
+                                                                artifact_dir=self.__artifact_dir,
+                                                                extravars=self.__extravars,  quiet=True)
+
+
+import Pyro5.api
+
 
 def nudge(pos, x_shift, y_shift):
     return {n:(x + x_shift, y + y_shift) for n,(x,y) in pos.items()}
 
+
+@Pyro5.api.expose
 class AnsibleWorkflow():
-    def __init__(self, workflow, inventory):
+    def __init__(self, workflow, inventory, logging_dir):
         self.__graph = nx.DiGraph()
         self.__allowed_node_keys = set(['block', 'import_playbook', 'name', 'strategy', 'id', 'vars'])
         self.__workflow_filename = workflow
         self.__inventory_filename = inventory
         self.__running_nodes = ['s']
         self.__running_statues = 'not_started'
-        self.__row = 0
+        self.__stop_requested = False
+        self.__logging_dir = logging_dir
+        self.__data = dict()
 
         # import data from file
         self.__import_file(self.__workflow_filename)
@@ -103,7 +115,7 @@ class AnsibleWorkflow():
         nx.draw_networkx_nodes(self.__graph, pos, node_size=250)
 
         # draw block nodes differently
-        block_nodes=[n for n, d in  list(self.__graph.nodes(data=True)) if isinstance(d['data'], BNode) and d['data'].get_id() != 's' and d['data'].get_id() != 'e']
+        block_nodes=[n for n in  list(self.__graph.nodes()) if isinstance(self.__data[n]['object'], BNode) and self.__data[n]['object'].get_id() != 's' and self.__data[n]['object'].get_id() != 'e']
         nx.draw_networkx_nodes(self.__graph, pos, nodelist=block_nodes, node_size=350, node_color="#777")
 
         # draw start and end node differently
@@ -114,80 +126,22 @@ class AnsibleWorkflow():
 
         # draw labels
         label_position = nudge(pos, 0, 20)
-        labels = {n: '' if isinstance(d['data'], BNode) else os.path.basename(d['data'].get_playbook()) for n, d in  list(self.__graph.nodes(data=True)) }
+        labels = {n: '' if isinstance(self.__data[n]['object'], BNode) else os.path.basename(self.__data[n]['object'].get_playbook()) for n in list(self.__graph.nodes()) }
         nx.draw_networkx_labels(self.__graph,labels=labels, pos=label_position, font_size=10)
 
         plt.savefig(self.__workflow_filename + '.png')
 
-    def __print_graph(self, window):
-        import_tree = copy.deepcopy(self.__input_file_data)
-        del import_tree[0]
-        del import_tree[len(import_tree) - 1]
-        self.__print_tree(window, import_tree)
+    def is_running(self):
+        return len(self.__running_nodes) != 0
 
+    def get_graph(self):
+        return self.__graph
 
-    def __print_tree(self, window, nodes, prev_latest=False, level=0, prefix=''):
-        for inode in nodes:
-            # selection of char for current node
-            current_char = '├'
-            previous_char = '│'
-            next_prefix = ''
+    def get_node_datas(self):
+        return self.__data
 
-            if nodes[-1] == inode: # latest element
-                current_char = '└'
-
-                if nodes[0] == inode: # is composed by one element
-                    current_char = '─'
-                    if not prev_latest:
-                        previous_char = '├'
-                else:
-                    if prev_latest:
-                        previous_char = ' '
-            elif nodes[0] == inode: # is the first
-                current_char = '┬'
-                if prev_latest:
-                    previous_char = '└'
-                else:
-                    previous_char = '├'
-            elif prev_latest:
-                previous_char = ' '
-
-            # prefix
-            if level > 0:
-                next_prefix = '│'
-                if prev_latest:
-                    next_prefix = ' '
-
-
-            #print("node: %s | level: %s | prev_latest: %s | prev_char: %s | current_char: %s | next_prefix: #%s# | prefix: #%s#" % ( inode['id'], level, prev_latest, previous_char, current_char, next_prefix, prefix))
-            if 'block' in inode:
-                self.__print_tree(window, inode['block'], prev_latest=(nodes[-1] == inode), level=(level + 1), prefix=prefix+next_prefix)
-            else:
-                if level == 0:
-                    previous_char = ''
-                window.addstr(self.__row, 0, "%s%s%s %s [%s]" % (prefix, previous_char, current_char, inode['import_playbook'], self.__graph.nodes[inode['id']]['data'].get_status()))
-                self.__row = self.__row + 1
-
-    def run_graphically(self):
-        terminal = curses.initscr()
-        max_y, max_x = terminal.getmaxyx()
-        main_win = curses.newwin(max_y, max_x, 0, 0)
-        if self.__running_statues != 'not_started':
-            raise Exception("Already running")
-        self.__running_statues = 'started'
-        while len(self.__running_nodes):
-            self.__row = 0
-            self.__run_step()
-            self.__print_graph(main_win)
-            main_win.refresh()
-            main_win.clear()
-            curses.napms(2000)
-            terminal.refresh()
-            terminal.clear()
-        terminal.clear()
-        curses.endwin()
-        self.__running_statues = 'ended'
-
+    def get_input_data(self):
+        return self.__input_file_data
 
     def _check_node_syntax(self, node):
         remaining_keys = set(node.keys()) - self.__allowed_node_keys
@@ -227,11 +181,12 @@ class AnsibleWorkflow():
                 playbook=os.path.abspath(inode['import_playbook'])
                 inventory=os.path.abspath(inode.get('inventory', self.__inventory_filename))
                 extravars=inode.get('vars', {})
-                gnode = PNode(gnode_id, playbook=playbook, inventory=inventory, extravars=extravars)
+                gnode = PNode(gnode_id, playbook=playbook, inventory=inventory, artifact_dir=self.__logging_dir, extravars=extravars)
                 print("     %s node: %s       playbook: %s     inventory: %s    vars: %s" % (indentation, gnode_id, playbook, inventory, extravars))
 
             # the node specification is added
-            self.__graph.add_node(gnode_id, data=gnode)
+            self.__graph.add_node(gnode_id)
+            self.__data[gnode_id]=dict(object=gnode)
 
 
             if 'block' not in inode:
@@ -252,52 +207,117 @@ class AnsibleWorkflow():
         return zero_outdegree_nodes
 
     def __is_node_runnable(self, node_id):
-        print("Check node %s can be run" % node_id)
+        #print("Check node %s can be run" % node_id)
         in_edges = self.__graph.in_edges(node_id)
         for edge in in_edges:
             previous_node = edge[0]
-            print("\tPrevious node %s status: %s" % (previous_node, self.__graph.nodes[previous_node]['data'].get_status()))
-            if self.__graph.nodes[previous_node]['data'].get_status() != 'ended':
+            #print("\tPrevious node %s status: %s" % (previous_node, self.__graph.nodes[previous_node]['data'].get_status()))
+            if self.__data[previous_node]['object'].get_status() != 'ended':
                 return False
         return True
 
     def __run_step(self):
         for node_id in self.__running_nodes:
-
-            node = self.__graph.nodes[node_id]['data']
+            node = self.__data[node_id]['object']
             # if current node is ended search for next nodes
             if node.get_status() == 'ended':
                 self.__running_nodes.remove(node_id)
+                self.__data[node_id]['ended'] = datetime.now()
                 for out_edge in self.__graph.out_edges(node_id):
                     next_node_id = out_edge[1]
-                    next_node = self.__graph.nodes[next_node_id]['data']
-
+                    next_node = self.__data[next_node_id]['object']
                     if self.__is_node_runnable(next_node_id):
-                        print("Run node %s" % next_node_id)
+                        #print("Run node %s" % next_node_id)
                         self.__running_nodes.append(next_node_id)
                         if isinstance(next_node , PNode):
+                            self.__data[next_node_id]['started'] = datetime.now()
                             next_node.run()
             elif node.get_status() == 'failed':
                 # just remove a failed node
-                print("Failed node %s" % node_id)
+                #print("Failed node %s" % node_id)
+                self.__data[node_id]['ended'] = datetime.now()
                 self.__running_nodes.remove(node_id)
+
+    def stop(self):
+        self.__stop_requested = True
+
+    def __run_loop(self):
+        # loop over nodes
+        while len(self.__running_nodes) and not self.__stop_requested:
+            self.__run_step()
+            time.sleep(1)
+
+        if self.__stop_requested:
+            self.__running_statues = 'stopped'
+        else:
+            self.__running_statues = 'ended'
 
     def run(self):
         if self.__running_statues != 'not_started':
             raise Exception("Already running")
         self.__running_statues = 'started'
-        # loop over nodes
-        while len(self.__running_nodes):
-            self.__run_step()
-        self.__running_statues = 'ended'
 
-def main():
-    aw = AnsibleWorkflow(workflow="input1.yml", inventory='inventory.ini')
-    #aw.draw_graph()
-    #aw.print_graph()
-    aw.run_graphically()
-    #aw.run()
+        # run the workflow in a separate thread
+        run_thread = threading.Thread(target=self.__run_loop)
+        run_thread.daemon = True
+        run_thread.start()
 
+    def get_workflow_status(self):
+        return self.__running_statues
 
-if __name__ == "__main__":
-    main()
+    def get_nodes_status(self):
+        statuses = {}
+        for node_id, data in self.__data.items():
+            node_obj = data['object']
+            status = node_obj.get_status()
+            statuses[node_id] = {
+                'status': status,
+                'started': data.get('started', None),
+                'ended': data.get('ended', None),
+            }
+        return statuses
+
+    def get_playbook_output(self, node_id):
+        if node_id not in self.__data:
+            return "Node not found."
+
+        node_obj = self.__data[node_id]['object']
+        if not isinstance(node_obj, PNode):
+            return "Not a playbook node."
+
+        # ansible-runner saves stdout in artifact_dir/ident/stdout
+        # PNode is initialized with artifact_dir and ident is the node_id
+        # So the path is logging_dir/node_id/stdout
+        output_path = os.path.join(self.__logging_dir, str(node_id), 'stdout')
+
+        if os.path.exists(output_path):
+            with open(output_path, 'r') as f:
+                return f.read()
+        else:
+            return "Output not available yet."
+
+    def tail_playbook_output(self, node_id, offset=0):
+        if node_id not in self.__data:
+            return "Node not found.", 0
+
+        node_obj = self.__data[node_id]['object']
+        if not isinstance(node_obj, PNode):
+            return "Not a playbook node.", 0
+
+        output_path = os.path.join(self.__logging_dir, str(node_id), 'stdout')
+
+        if os.path.exists(output_path):
+            try:
+                with open(output_path, 'r') as f:
+                    f.seek(0, os.SEEK_END)
+                    file_size = f.tell()
+                    if offset < file_size:
+                        f.seek(offset)
+                        new_content = f.read()
+                        return new_content, file_size
+                    else:
+                        return "", file_size
+            except Exception as e:
+                return f"Error reading file: {e}", offset
+        else:
+            return "", 0
