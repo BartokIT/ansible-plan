@@ -46,9 +46,8 @@ def launch_daemonized_server():
         # The DaemonContext will fork a second time and detach.
         context = daemon.DaemonContext(
             working_directory=os.getcwd(),
-            # Redirect streams to /dev/null, a real app would use log files.
-            stdout=open(os.devnull, 'w+'),
-            stderr=open(os.devnull, 'w+'),
+            stdout=open('server_stdout.log', 'w+'),
+            stderr=open('server_stderr.log', 'w+'),
         )
 
         with context:
