@@ -65,7 +65,6 @@ class WorkflowUi(App):
     def compose(self) -> ComposeResult:
         """Create child widgets for the app."""
         with Horizontal(id="header-container"):
-            yield Button("Start", id="start-button", variant="success")
             yield Button("Restart", id="restart-button", variant="primary")
             yield Button("Stop", id="stop-button", variant="error")
 
@@ -93,7 +92,6 @@ class WorkflowUi(App):
             result = self.controller.load_workflow(self.workflow_path, self.inventory_path)
             status_bar.update(result)
             if "Error" in result and "Reconnected" not in result:
-                self.query_one("#start-button").disabled = True
                 return
 
             tree = self.query_one(Tree)
@@ -105,10 +103,23 @@ class WorkflowUi(App):
             actual_workflow = workflow_data[1:-1] # Skip 's' and 'e' nodes
             self._recursive_build_tree(tree.root, actual_workflow)
             tree.root.expand_all() # Expand all nodes as requested
-            status_bar.update("Workflow tree built. Ready to start.")
+            status_bar.update("Workflow tree built. Triggering run...")
+            self.run_workflow()
 
         except Exception as e:
             status_bar.update(f"Error: {e}")
+
+    @work(exclusive=True)
+    async def run_workflow(self) -> None:
+        """Runs the workflow on the server."""
+        status_bar = self.query_one("#status-bar")
+        try:
+            # Short delay to allow UI to settle before starting
+            await asyncio.sleep(0.5)
+            result = self.controller.run()
+            status_bar.update(f"Server: {result}")
+        except Exception as e:
+            status_bar.update(f"Error starting workflow: {e}")
 
     def _recursive_build_tree(self, parent_node, data):
         for item in data:
@@ -126,13 +137,6 @@ class WorkflowUi(App):
     async def update_statuses(self) -> None:
         """Polls the server for status updates and refreshes the tree."""
         try:
-            workflow_status = self.controller.get_workflow_status()
-            start_button = self.query_one("#start-button")
-            if workflow_status != 'not_started' and workflow_status != 'no_workflow_loaded':
-                start_button.disabled = True
-            else:
-                start_button.disabled = False
-
             statuses = self.controller.get_nodes_status()
             tree = self.query_one(Tree)
 
@@ -179,13 +183,7 @@ class WorkflowUi(App):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
         status_bar = self.query_one("#status-bar")
-        if event.button.id == "start-button":
-            try:
-                result = self.controller.run()
-                status_bar.update(f"Server: {result}")
-            except Exception as e:
-                status_bar.update(f"Error starting workflow: {e}")
-        elif event.button.id == "stop-button":
+        if event.button.id == "stop-button":
             try:
                 result = self.controller.stop()
                 status_bar.update(f"Server: {result}")
