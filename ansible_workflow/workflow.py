@@ -58,12 +58,15 @@ class PNode(Node):
     def get_playbook(self):
         return self.__playbook
 
-    def run(self):
-        self.__thread, self.__runner = ansible_runner.run_async(playbook=self.__playbook,
-                                                                inventory=self.__inventory,
-                                                                ident=self.get_id(),
-                                                                artifact_dir=self.__artifact_dir,
-                                                                extravars=self.__extravars,  quiet=True)
+    def get_inventory(self):
+        return self.__inventory
+
+    def get_extravars(self):
+        return self.__extravars
+
+    def set_runner(self, thread, runner):
+        self.__thread = thread
+        self.__runner = runner
 
 
 import Pyro5.api
@@ -254,11 +257,28 @@ class AnsibleWorkflow():
                     if self.__is_node_runnable(next_node_id):
                         self.__running_nodes.append(next_node_id)
                         next_node_data = self.__data[next_node_id]
-                        next_node = next_node_data['object']
                         if next_node_data['type'] == 'PNode':
                             next_node_data['status'] = 'running'
                             next_node_data['started'] = datetime.now()
-                            next_node.run()
+                            pnode_object = next_node_data['object']
+                            try:
+                                thread, runner = ansible_runner.run_async(
+                                    playbook=pnode_object.get_playbook(),
+                                    inventory=pnode_object.get_inventory(),
+                                    ident=pnode_object.get_id(),
+                                    artifact_dir=self.__logging_dir,
+                                    extravars=pnode_object.get_extravars(),
+                                    quiet=True
+                                )
+                                pnode_object.set_runner(thread, runner)
+                            except Exception as e:
+                                print(f"ERROR: Failed to start playbook for node {next_node_id}: {e}")
+                                next_node_data['status'] = 'failed'
+                                next_node_data['ended'] = datetime.now()
+                                # Since this node failed to even start, it's not in __running_nodes
+                                # but we need to process its failure to skip its successors.
+                                self.__running_nodes.remove(next_node_id)
+                                self._mark_successors_as_skipped(next_node_id)
 
             elif node_data['status'] == 'failed':
                 self.__running_nodes.remove(node_id)
@@ -271,7 +291,13 @@ class AnsibleWorkflow():
     def __run_loop(self):
         # loop over nodes
         while len(self.__running_nodes) and not self.__stop_requested:
-            self.__run_step()
+            try:
+                self.__run_step()
+            except Exception as e:
+                print(f"FATAL: Unhandled exception in workflow run loop: {e}")
+                # Stop the workflow to prevent further issues.
+                self.__running_statues = 'failed'
+                break
             time.sleep(1)
 
         if self.__stop_requested:
