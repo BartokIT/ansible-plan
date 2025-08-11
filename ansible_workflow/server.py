@@ -19,11 +19,14 @@ class WorkflowController:
             os.makedirs(self.log_dir_base)
 
     def load_workflow(self, workflow_path, inventory_path):
-        """Loads a new workflow, but only if one is not already active."""
-        if self.workflow and self.workflow.get_workflow_status() not in ['ended', 'stopped', 'failed']:
-             # If a workflow is active, just return its status
-            return f"Workflow already active with status: {self.workflow.get_workflow_status()}"
+        """Loads a workflow if one is not already present."""
+        if self.workflow:
+            # A workflow is already loaded, do nothing.
+            # The client will now see the state of this existing workflow.
+            return f"Reconnected to existing workflow. Status: {self.workflow.get_workflow_status()}"
 
+        # No workflow has been loaded yet for the lifetime of this server. Load it now.
+        print(f"First client connected. Loading workflow from: {workflow_path}")
         logging_dir = "%s/%s_%s" % (self.log_dir_base, os.path.basename(workflow_path), datetime.now().strftime("%Y%m%d_%H%M%S"))
 
         try:
@@ -32,8 +35,10 @@ class WorkflowController:
                 inventory=inventory_path,
                 logging_dir=logging_dir
             )
-            return "Workflow loaded successfully."
+            return "Workflow loaded successfully for the first time."
         except Exception as e:
+            # If loading fails, the server remains in a state with no workflow.
+            self.workflow = None
             return f"Error loading workflow: {e}"
 
     def get_workflow_status(self):
