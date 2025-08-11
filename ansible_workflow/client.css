@@ -43,6 +43,7 @@
     height: 100%;
 }
 
-StatusBar {
+#status-bar {
     dock: bottom;
+    height: 1;
 }

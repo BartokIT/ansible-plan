@@ -1,7 +1,7 @@
 import Pyro5.api
 from itertools import cycle
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Tree, Log, Button, Static, StatusBar
+from textual.widgets import Header, Tree, Log, Button, Static
 from textual.containers import Horizontal, Vertical
 from textual import work
 import sys
@@ -77,20 +77,21 @@ class WorkflowUi(App):
                     yield NodeDetails("Select a node to see details.")
                 with Vertical(id="log-container"):
                     yield Log(id="output-log", auto_scroll=True)
-        yield StatusBar()
+        yield Static(id="status-bar", classes="box")
 
     def on_mount(self) -> None:
         """Called when app is mounted."""
-        self.status_bar.update("Loading workflow...")
+        self.query_one("#status-bar").update("Loading workflow...")
         self.load_workflow_and_build_tree()
         self.polling_timer = self.set_interval(1, self.update_statuses)
 
     @work(exclusive=True)
     async def load_workflow_and_build_tree(self) -> None:
         """Loads the workflow on the server and builds the initial tree."""
+        status_bar = self.query_one("#status-bar")
         try:
             result = self.controller.load_workflow(self.workflow_path, self.inventory_path)
-            self.status_bar.update(result)
+            status_bar.update(result)
             if "Error" in result and "Reconnected" not in result:
                 self.query_one("#start-button").disabled = True
                 return
@@ -99,15 +100,15 @@ class WorkflowUi(App):
             tree.clear()
             workflow_data = self.controller.get_input_data()
             if not workflow_data:
-                self.status_bar.update("Error: Failed to get workflow data from server.")
+                status_bar.update("Error: Failed to get workflow data from server.")
                 return
             actual_workflow = workflow_data[1:-1] # Skip 's' and 'e' nodes
             self._recursive_build_tree(tree.root, actual_workflow)
             tree.root.expand_all() # Expand all nodes as requested
-            self.status_bar.update("Workflow tree built. Ready to start.")
+            status_bar.update("Workflow tree built. Ready to start.")
 
         except Exception as e:
-            self.status_bar.update(f"Error: {e}")
+            status_bar.update(f"Error: {e}")
 
     def _recursive_build_tree(self, parent_node, data):
         for item in data:
@@ -177,28 +178,29 @@ class WorkflowUi(App):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         """Handle button press events."""
+        status_bar = self.query_one("#status-bar")
         if event.button.id == "start-button":
             try:
                 result = self.controller.run()
-                self.status_bar.update(f"Server: {result}")
+                status_bar.update(f"Server: {result}")
             except Exception as e:
-                self.status_bar.update(f"Error starting workflow: {e}")
+                status_bar.update(f"Error starting workflow: {e}")
         elif event.button.id == "stop-button":
             try:
                 result = self.controller.stop()
-                self.status_bar.update(f"Server: {result}")
+                status_bar.update(f"Server: {result}")
             except Exception as e:
-                self.status_bar.update(f"Error stopping workflow: {e}")
+                status_bar.update(f"Error stopping workflow: {e}")
         elif event.button.id == "restart-button":
             try:
                 result = self.controller.restart_workflow()
-                self.status_bar.update(f"Server: {result}")
+                status_bar.update(f"Server: {result}")
                 # After restarting, clear the log and details and reload the workflow
                 self.query_one("#output-log").clear()
                 self.query_one(NodeDetails).update_details({})
                 self.load_workflow_and_build_tree()
             except Exception as e:
-                self.status_bar.update(f"Error restarting workflow: {e}")
+                status_bar.update(f"Error restarting workflow: {e}")
 
     async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         """Handle tree node selection and start tailing the log."""
