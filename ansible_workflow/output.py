@@ -469,6 +469,7 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             root_node.set_label(f"{self.status_icons[NodeStatus.NOT_STARTED]} Workflow")
             self.tree_nodes[root_node_id] = root_node
             self._build_tree(workflow, root_node_id, root_node)
+            tree.root.expand_all()
             self.run_workflow()
 
         @work(thread=True)
@@ -485,12 +486,13 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                     continue
                 child_node_obj = workflow.get_node_object(child_id)
                 icon = self.status_icons.get(child_node_obj.get_status(), " ")
+                allow_expand = isinstance(child_node_obj, BNode)
                 if isinstance(child_node_obj, BNode):
                     label = f"{icon} [b]{child_node_obj.get_id()}[/b]"
                 else:
                     label = f"{icon} {child_node_obj.get_id()}"
 
-                child_tree_node = tree_node.add(label, data=child_id)
+                child_tree_node = tree_node.add(label, data=child_id, allow_expand=allow_expand)
                 self.tree_nodes[child_id] = child_tree_node
 
                 if workflow.get_original_graph().out_degree(child_id) > 0:
