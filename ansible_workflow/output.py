@@ -513,6 +513,7 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
 [b]Reference:[/b] {node_obj.get_reference()}
 """
                 details_panel.update(details)
+                self.show_stdout(node_obj)
             elif isinstance(node_obj, BNode):
                 stdout_log = self.query_one("#playbook_stdout", RichLog)
                 stdout_log.clear()
@@ -572,6 +573,27 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                     label = f"{icon} {node_id}"
                 tree_node.set_label(label)
                 time.sleep(0.1)
+
+        @work(exclusive=True, thread=True)
+        def show_stdout(self, node: PNode):
+            """Reads and displays the entire stdout for a given node."""
+            stdout_log = self.query_one("#playbook_stdout", RichLog)
+            stdout_log.clear()
+
+            artifact_dir = self.outer_instance.get_workflow().get_logging_dir()
+            # The 'ident' is the actual directory name used by ansible-runner, which
+            # can be different from the node_id if the node is re-run.
+            ident = getattr(node, 'ident', node.get_id())
+            stdout_path = os.path.join(artifact_dir, ident, "stdout")
+
+            self.outer_instance._logger.info(f"Showing stdout for node {node.get_id()} from {stdout_path}")
+
+            if os.path.exists(stdout_path):
+                with open(stdout_path, "r") as f:
+                    content = f.read()
+                    stdout_log.write(content)
+            else:
+                stdout_log.write("No standard output available for this node (it may not have run yet).")
 
         @work(exclusive=True, thread=True)
         def watch_stdout(self, node: PNode):
