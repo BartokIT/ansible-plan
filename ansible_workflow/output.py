@@ -16,7 +16,7 @@ from rich.console import Console
 from rich.table import Table
 import sys
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Tree, RichLog, Rule
+from textual.widgets import Header, Footer, Static, Tree, RichLog, Rule, DataTable
 from textual.containers import Container, Horizontal, Vertical
 from textual import work
 from textual.reactive import reactive
@@ -460,7 +460,7 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             with Horizontal():
                 yield Tree("Workflow", id="workflow_tree", classes="sidebar")
                 with Vertical():
-                    yield Static("Node Details", id="node_details")
+                    yield DataTable(id="node_details")
                     yield Rule()
                     yield RichLog(id="playbook_stdout", markup=True)
             yield Footer()
@@ -471,8 +471,10 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             root_node_id = "_root"
             root_node = tree.root
             root_node.data = root_node_id
-            root_node.set_label(f"{self.status_icons[NodeStatus.NOT_STARTED]} Workflow")
+            root_node.set_label(f"{self.status_icons.get(NodeStatus.NOT_STARTED, ' ')} Workflow")
             self.tree_nodes[root_node_id] = root_node
+            details_table = self.query_one("#node_details", DataTable)
+            details_table.add_columns("Property", "Value")
             self._build_tree(workflow, root_node_id, root_node)
             tree.root.expand_all()
             self.run_workflow()
@@ -490,11 +492,11 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                 if child_id in ['_s', '_e']:
                     continue
                 child_node_obj = workflow.get_node_object(child_id)
-                icon = self.status_icons.get(child_node_obj.get_status(), " ")
                 allow_expand = isinstance(child_node_obj, BNode)
                 if isinstance(child_node_obj, BNode):
-                    label = f"{icon} [b]{child_node_obj.get_id()}[/b]"
+                    label = f"[b]{child_node_obj.get_id()}[/b]"
                 else:
+                    icon = self.status_icons.get(child_node_obj.get_status(), " ")
                     label = f"{icon} {child_node_obj.get_id()}"
 
                 child_tree_node = tree_node.add(label, data=child_id, allow_expand=allow_expand)
@@ -511,35 +513,28 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             node_id = event.node.data
             workflow = self.outer_instance.get_workflow()
             node_obj = workflow.get_node_object(node_id)
-            details_panel = self.query_one("#node_details", Static)
+            details_table = self.query_one("#node_details", DataTable)
+            details_table.clear()
 
             if isinstance(node_obj, PNode):
-                details = f"""\
-[b]ID:[/b] {node_obj.get_id()}
-[b]Playbook:[/b] {node_obj.get_playbook()}
-[b]Inventory:[/b] {getattr(node_obj, '_PNode__inventory', 'N/A')}
-[b]Description:[/b] {node_obj.get_description()}
-[b]Reference:[/b] {node_obj.get_reference()}
-"""
-                details_panel.update(details)
+                details_table.add_row("ID", node_obj.get_id())
+                details_table.add_row("Playbook", node_obj.get_playbook())
+                details_table.add_row("Inventory", getattr(node_obj, '_PNode__inventory', 'N/A'))
+                details_table.add_row("Description", node_obj.get_description())
+                details_table.add_row("Reference", node_obj.get_reference())
                 self.show_stdout(node_obj)
                 if node_obj.get_status() == NodeStatus.RUNNING:
                     self.stdout_watcher = self.watch_stdout(node_obj)
             elif isinstance(node_obj, BNode):
                 stdout_log = self.query_one("#playbook_stdout", RichLog)
-                stdout_log.display = False
-                stdout_log.display = True
                 stdout_log.clear()
                 node_data = workflow.get_node(node_id)[1]
-                strategy = node_data.get('block', {}).get('strategy', 'N/A')
-                details = f"""\
-[b]ID:[/b] {node_obj.get_id()}
-[b]Type:[/b] Block
-[b]Strategy:[/b] {strategy}
-"""
-                details_panel.update(details)
+                details_table.add_row("ID", node_obj.get_id())
+                details_table.add_row("Type", "Block")
+                details_table.add_row("Strategy", node_data.get('block', {}).get('strategy', 'N/A'))
             else:
-                details_panel.update("Select a node to see details.")
+                # Details for root node or other types
+                details_table.add_row("ID", node_obj.get_id())
 
         def handle_workflow_event(self, event: WorkflowEvent):
             if event.get_type() == WorkflowEventType.NODE_EVENT:
@@ -557,10 +552,10 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                             self.node_spinners[node_id].cancel()
                             del self.node_spinners[node_id]
 
-                        icon = self.status_icons.get(status, " ")
                         if isinstance(node, BNode):
-                            label = f"{icon} [b]{node_id}[/b]"
+                            label = f"[b]{node_id}[/b]"
                         else:
+                            icon = self.status_icons.get(status, " ")
                             label = f"{icon} {node_id}"
                         tree_node.set_label(label)
 
