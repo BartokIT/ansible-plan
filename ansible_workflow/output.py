@@ -595,7 +595,10 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             if os.path.exists(stdout_path):
                 with open(stdout_path, "r") as f:
                     content = f.read()
-                    stdout_log.write(content)
+                    width = stdout_log.size.width
+                    padded_lines = [line.ljust(width) for line in content.splitlines()]
+                    padded_content = "\n".join(padded_lines)
+                    stdout_log.write(padded_content)
             else:
                 stdout_log.write("No standard output available for this node (it may not have run yet).")
 
@@ -611,14 +614,16 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             self.outer_instance._logger.info(f"Watching stdout for node {node.get_id()} at {stdout_path}")
 
             last_pos = 0
+            tree = self.query_one(Tree)
             while node.get_status() == NodeStatus.RUNNING:
-                if os.path.exists(stdout_path):
-                    with open(stdout_path, "r") as f:
-                        f.seek(last_pos)
-                        new_content = f.read()
-                        if new_content:
-                            stdout_log.write(new_content)
-                            last_pos = f.tell()
+                if tree.cursor_node and tree.cursor_node.data == node.get_id():
+                    if os.path.exists(stdout_path):
+                        with open(stdout_path, "r") as f:
+                            f.seek(last_pos)
+                            new_content = f.read()
+                            if new_content:
+                                stdout_log.write(new_content)
+                                last_pos = f.tell()
                 time.sleep(0.5)
 
             # Final read
