@@ -14,6 +14,7 @@ from .workflow import (AnsibleWorkflow, BNode, NodeStatus, PNode, WorkflowEvent,
                        WorkflowStatus, WorkflowEventType)
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 import sys
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Tree, RichLog, Rule, DataTable
@@ -460,7 +461,7 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             with Horizontal():
                 yield Tree("Workflow", id="workflow_tree", classes="sidebar")
                 with Vertical():
-                    yield DataTable(id="node_details", show_cursor=False)
+                    yield DataTable(id="node_details", show_cursor=False, show_header=False)
                     yield Rule()
                     yield RichLog(id="playbook_stdout", markup=True)
             yield Footer()
@@ -474,7 +475,7 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             root_node.set_label(f"{self.status_icons.get(NodeStatus.NOT_STARTED, ' ')} Workflow")
             self.tree_nodes[root_node_id] = root_node
             details_table = self.query_one("#node_details", DataTable)
-            details_table.add_columns("Property", "Value")
+            details_table.add_column("Value", width=100)
             self._build_tree(workflow, root_node_id, root_node)
             tree.root.expand_all()
             self.run_workflow()
@@ -517,11 +518,11 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             details_table.clear()
 
             if isinstance(node_obj, PNode):
-                details_table.add_row("[b]ID[/b]", node_obj.get_id())
-                details_table.add_row("[b]Playbook[/b]", node_obj.get_playbook())
-                details_table.add_row("[b]Inventory[/b]", getattr(node_obj, '_PNode__inventory', 'N/A'))
-                details_table.add_row("[b]Description[/b]", node_obj.get_description())
-                details_table.add_row("[b]Reference[/b]", node_obj.get_reference())
+                details_table.add_row(node_obj.get_id(), label=Text("ID", style="bold"))
+                details_table.add_row(node_obj.get_playbook(), label=Text("Playbook", style="bold"))
+                details_table.add_row(getattr(node_obj, '_PNode__inventory', 'N/A'), label=Text("Inventory", style="bold"))
+                details_table.add_row(node_obj.get_description(), label=Text("Description", style="bold"))
+                details_table.add_row(node_obj.get_reference(), label=Text("Reference", style="bold"))
                 self.show_stdout(node_obj)
                 if node_obj.get_status() == NodeStatus.RUNNING:
                     self.stdout_watcher = self.watch_stdout(node_obj)
@@ -529,12 +530,12 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                 stdout_log = self.query_one("#playbook_stdout", RichLog)
                 stdout_log.clear()
                 node_data = workflow.get_node(node_id)[1]
-                details_table.add_row("[b]ID[/b]", node_obj.get_id())
-                details_table.add_row("[b]Type[/b]", "Block")
-                details_table.add_row("[b]Strategy[/b]", node_data.get('block', {}).get('strategy', 'N/A'))
+                details_table.add_row(node_obj.get_id(), label=Text("ID", style="bold"))
+                details_table.add_row("Block", label=Text("Type", style="bold"))
+                details_table.add_row(node_data.get('block', {}).get('strategy', 'N/A'), label=Text("Strategy", style="bold"))
             else:
                 # Details for root node or other types
-                details_table.add_row("[b]ID[/b]", node_obj.get_id())
+                details_table.add_row(node_obj.get_id(), label=Text("ID", style="bold"))
 
         def handle_workflow_event(self, event: WorkflowEvent):
             if event.get_type() == WorkflowEventType.NODE_EVENT:
