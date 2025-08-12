@@ -1,0 +1,19 @@
+---
+- name: First playbook
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: First task encrypted playbook
+      debug:
+        msg: Content is {{ vaulted_var }}
+      vars:
+        vaulted_var: !vault |
+          $ANSIBLE_VAULT;1.2;AES256;V2
+          66323739643631636165396336383861633132633630663861613737343337353963323438336365
+          3735376262393730333662623435656537633831666136310a346136326435376130363461373132
+          32383533623966663761666639346564666366643730366362373338616234383766353966626634
+          3864623933666664370a643735643537353834333436663035306137363064323635333265393562
+          6230
+    - name: End task encrypted playbook
+      debug:
+        msg: End task encrypted playbook

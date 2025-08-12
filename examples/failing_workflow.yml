@@ -1,0 +1,52 @@
+---
+options:
+  global_path: examples/
+  vault_script: vault_script_test.py
+defaults:
+  inventory: inventory.ini
+workflow:
+
+  - id: block_infra
+    strategy: parallel
+    block:
+
+      - id: shutdown-linux
+        import_playbook: playbooks/failing_play.yml
+        description: This task aims to shutdown all physical servers
+        reference: TA_LINUX
+
+      - id: shutdown-oracle
+        import_playbook: playbooks/failing_play.yml
+        description: |
+          This task aims to shutdown all oracle servers. the servers are c2prddbm1*.
+          Adding more lines 
+          - test
+          - test
+          bla bla bla.
+        reference: TA_ORACLE
+
+      - id: block_svc
+        strategy: serial
+        block:
+
+          - id: other_stuff_1
+            import_playbook: playbooks/failing_play.yml
+            description: other stuff
+            reference: TA_IAM
+
+          - id: other_stuff_2
+            import_playbook: playbooks/failing_play.yml
+            description: |
+              This task aims to shutdown all oracle servers. the servers are c2prddbm1*.
+              Adding more lines 
+              - test
+              - test
+              bla bla bla.
+            reference: TA_JBOSS
+
+  - id: block_services
+    strategy: parallel
+    block:
+
+      - id: last
+        import_playbook: playbooks/first.yml

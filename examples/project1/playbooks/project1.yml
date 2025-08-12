@@ -3,17 +3,14 @@
   hosts: all
   gather_facts: no
   tasks:
-    - name: First task first playbook
-      debug:
-        msg: First task first playbook
-
-    - name: Check mode?
-      debug:
-        msg: "Check mode: {{ ansible_check_mode }}"
+    - name: Include the dummy role
+      include_role:
+        name: test.dummy.dummy1
 
     - name: Pause 5 seconds
       pause:
         seconds: 5
+
     - name: End task first playbook
       debug:
         msg: End task first playbook

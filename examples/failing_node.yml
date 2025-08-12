@@ -1,0 +1,16 @@
+---
+options:
+  global_path: examples/
+  vault_script: vault_script_test.py
+defaults:
+  inventory: inventory.ini
+workflow:
+  - id: failing
+    import_playbook: playbooks/failing_play.yml
+    description: |
+      Questo task non serve a na cippalippa serve solo per fa farllire il ciborio
+      Questo task non serve a na cippalippa serve solo per fa farllire il ciborio
+      asd
+      Questo task non serve a na cippalippa serve solo per fa farllire il ciborio
+      s
+    reference: TA_GIUFFRIDA

@@ -6,9 +6,9 @@
     - name: third task third playbook
       debug:
         msg: third task third playbook
-    - name: Pause 5 seconds
+    - name: Pause 10 seconds
       pause:
-        seconds: 5
+        seconds: 10 
     - name: End task third playbook
       debug:
         msg: End task third playbook

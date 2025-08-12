@@ -1,0 +1,50 @@
+---
+meta:
+  format-version: 1
+templating:
+  var_number_one: content_fist_var
+options:
+  global_path: examples/
+  vault_script: vault_script_test.py
+defaults:
+  inventory: inventory.ini
+  vars:
+    default_var1: default_value1
+  project_path: .
+  limit: first_hostname
+  vault_ids:
+    - V1
+workflow:
+  - id: serial_example
+    strategy: serial
+    block:
+      - id: s1
+        block:
+          - id: sub11
+            import_playbook: playbooks/first.yml
+      - id: s2
+        import_playbook: playbooks/default_extra_vars_play.yml
+  - id: all_params
+    inventory: inventory.ini
+    project_path: .
+    import_playbook: playbooks/extra_vars_play.yml
+    vars:
+      extra_var1: "{{ var_number_one }}"
+      extra_var2: concatenation{{ var_number_one | upper }}
+    vault_ids:
+      - ID1
+      - ID2
+    limit: third_hostname
+  - id: parallel_example
+    strategy: parallel
+    block:
+      - id: p1
+        import_playbook: playbooks/third.yml
+      - id: p2
+        import_playbook: playbooks/fourth.yml
+      - id: p3
+        import_playbook: playbooks/default_encrypted.yml
+      - id: p4
+        import_playbook: playbooks/encrypted.yml
+        vault_ids:
+          - V1

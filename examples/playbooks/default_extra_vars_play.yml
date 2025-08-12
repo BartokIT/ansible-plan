@@ -1,0 +1,8 @@
+---
+- name: Extra vars
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: First task with extra vars
+      debug:
+        msg: The extra vars default_var1 content is {{ default_var1 }}
