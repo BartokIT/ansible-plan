@@ -440,6 +440,16 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             super().__init__()
             self.outer_instance = outer_instance
             self.tree_nodes = {}
+            self.spinner_icons = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+            self.status_icons = {
+                NodeStatus.NOT_STARTED: "○",
+                NodeStatus.PRE_RUNNING: "…",
+                NodeStatus.RUNNING: self.spinner_icons[0],
+                NodeStatus.ENDED: "✔",
+                NodeStatus.FAILED: "✖",
+                NodeStatus.SKIPPED: "»",
+            }
+            self.node_spinners = {}
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -456,6 +466,7 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             root_node_id = "_root"
             root_node = tree.root
             root_node.data = root_node_id
+            root_node.set_label(f"{self.status_icons[NodeStatus.NOT_STARTED]} Workflow")
             self.tree_nodes[root_node_id] = root_node
             self._build_tree(workflow, root_node_id, root_node)
             self.run_workflow()
@@ -473,10 +484,11 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                 if child_id in ['_s', '_e']:
                     continue
                 child_node_obj = workflow.get_node_object(child_id)
+                icon = self.status_icons.get(child_node_obj.get_status(), " ")
                 if isinstance(child_node_obj, BNode):
-                    label = f"[b]{child_node_obj.get_id()}[/b]"
+                    label = f"{icon} [b]{child_node_obj.get_id()}[/b]"
                 else:
-                    label = f"{child_node_obj.get_id()}"
+                    label = f"{icon} {child_node_obj.get_id()}"
 
                 child_tree_node = tree_node.add(label, data=child_id)
                 self.tree_nodes[child_id] = child_tree_node
@@ -508,27 +520,45 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             if event.get_type() == WorkflowEventType.NODE_EVENT:
                 status, node = event.get_event()
                 node_id = node.get_id()
+
                 if node_id in self.tree_nodes:
                     tree_node = self.tree_nodes[node_id]
-
-                    status_map = {
-                        NodeStatus.RUNNING: ("[yellow]running[/yellow]", "yellow"),
-                        NodeStatus.ENDED: ("[green]completed[/green]", "green"),
-                        NodeStatus.FAILED: ("[red]failed[/red]", "red"),
-                        NodeStatus.SKIPPED: ("[cyan]skipped[/cyan]", "cyan"),
-                    }
-
-                    if status in status_map:
-                        label, color = status_map[status]
-                        tree_node.set_label(f"{node_id} - {label}")
+                    icon = self.status_icons.get(status, " ")
+                    if isinstance(node, BNode):
+                        label = f"{icon} [b]{node_id}[/b]"
+                    else:
+                        label = f"{icon} {node_id}"
+                    tree_node.set_label(label)
 
                     if status == NodeStatus.RUNNING:
+                        if node_id not in self.node_spinners:
+                            self.node_spinners[node_id] = self.update_spinner(node)
                         self.watch_stdout(node)
+                    else:
+                        if node_id in self.node_spinners:
+                            self.node_spinners[node_id].cancel()
+                            del self.node_spinners[node_id]
 
             elif event.get_type() == WorkflowEventType.WORKFLOW_EVENT:
                 status, content = event.get_event()
                 # You can add logic here to handle workflow-level events, e.g., display a notification
                 pass
+
+        @work(thread=True)
+        def update_spinner(self, node: PNode):
+            node_id = node.get_id()
+            tree_node = self.tree_nodes[node_id]
+            spinner_cycle = itertools.cycle(self.spinner_icons)
+            is_bnode = isinstance(node, BNode)
+
+            while node.get_status() == NodeStatus.RUNNING:
+                icon = next(spinner_cycle)
+                if is_bnode:
+                    label = f"{icon} [b]{node_id}[/b]"
+                else:
+                    label = f"{icon} {node_id}"
+                tree_node.set_label(label)
+                time.sleep(0.1)
 
         @work(exclusive=True, thread=True)
         def watch_stdout(self, node: PNode):
