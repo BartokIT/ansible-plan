@@ -8,6 +8,8 @@ from typing import Optional, Dict, Any, List
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+import networkx as nx
 
 from ansible_workflow.workflow import AnsibleWorkflow, WorkflowStatus, NodeStatus
 from ansible_workflow.loader import WorkflowYamlLoader
@@ -122,6 +124,15 @@ async def stop_workflow():
 
     current_workflow.stop()
     return {"message": "Workflow stopping."}
+
+
+@app.get("/workflow/graph")
+async def get_workflow_graph():
+    if not current_workflow:
+        raise HTTPException(status_code=404, detail="No workflow is running or has been run.")
+
+    graph = current_workflow.get_graph()
+    return JSONResponse(content=nx.readwrite.json_graph.node_link_data(graph))
 
 
 @app.get("/status")

@@ -36,6 +36,7 @@ from .exceptions import (AnsibleWorkflowLoadingError, AnsibleWorkflowValidationE
                          ExitCodes, AnsibleWorkflowYAMLNotValid)
 from .loader import WorkflowYamlLoader
 from .output import StdoutWorkflowOutput, PngDrawflowOutput, TextualWorkflowOutput
+from .proxy import FrontendWorkflowProxy
 from ansible.cli.arguments import option_helpers as opt_help
 from ansible.parsing.splitter import parse_kv
 
@@ -214,47 +215,45 @@ def main():
             print(f"Backend response: {e.response.text}", file=sys.stderr)
         sys.exit(1)
 
-    print("Workflow started. Polling for status...")
+    workflow_proxy = FrontendWorkflowProxy(BACKEND_URL, logging_dir)
+    # Fetch graph for both stdout and textual modes before starting UI
+    if cmd_args.draw_png or cmd_args.mode == 'textual':
+        workflow_proxy.fetch_graph()
 
-    def signal_handler(sig, frame):
-        console = Console()
-        y_or_n = console.input('Do you want to stop the workflow? [y/n] ')
-        if y_or_n.lower() == 'y':
-            try:
-                requests.delete(f"{BACKEND_URL}/workflow")
-                console.print("Workflow stopping request sent.")
-            except requests.exceptions.RequestException as e:
-                console.print(f"Error stopping workflow: {e}")
+    start_from_node = cmd_args.start_from_node if cmd_args.start_from_node else '_s'
+    end_to_node = cmd_args.end_to_node if cmd_args.end_to_node else '_e'
 
-    signal.signal(signal.SIGINT, signal_handler)
+    if cmd_args.mode == 'textual' and not cmd_args.verify_only:
+        output = TextualWorkflowOutput(workflow=workflow_proxy, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
+        # In the original code, output.run was blocking.
+        # The new proxy's run method will also be blocking.
+        output.run(start_node=start_from_node, end_node=end_to_node, verify_only=cmd_args.verify_only)
+    else:
+        output_threads = []
+        if cmd_args.mode == 'stdout' or cmd_args.verify_only:
+            stdout_thread = StdoutWorkflowOutput(workflow=workflow_proxy, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
+            stdout_thread.start()
+            output_threads.append(stdout_thread)
 
-    while True:
-        try:
-            response = requests.get(f"{BACKEND_URL}/workflow")
-            response.raise_for_status()
-            status_data = response.json()
+        if cmd_args.draw_png:
+            png_thread = PngDrawflowOutput(workflow=workflow_proxy, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
+            png_thread.start()
+            output_threads.append(png_thread)
 
-            # Simple stdout display logic
+        def signal_handler(sig, frame):
             console = Console()
-            console.clear()
-            console.print(f"Workflow Status: {status_data['status']}")
-            console.print("-" * 20)
-            if "nodes" in status_data:
-                for node_id, node_info in status_data["nodes"].items():
-                    console.print(f"Node: {node_id:<20} Status: {node_info['status']:<15} Type: {node_info['type']}")
+            if not workflow_proxy.is_stopping():
+                y_or_n = console.input(' Do you want to quit the software? [y/n]')
+                if y_or_n.lower() == 'y':
+                    console.print(" Workflow stopping, please wait that running playbooks end.")
+                    workflow_proxy.stop()
 
-            if status_data["status"] in ["ended", "failed"]:
-                print(f"Workflow finished with status: {status_data['status']}")
-                break
+        signal.signal(signal.SIGINT, signal_handler)
 
-            time.sleep(2)
+        workflow_proxy.run(start_node=start_from_node, end_node=end_to_node, verify_only=cmd_args.verify_only)
 
-        except requests.exceptions.RequestException as e:
-            print(f"Error polling workflow status: {e}", file=sys.stderr)
-            break
-        except KeyboardInterrupt:
-            # This is handled by the signal handler, but as a fallback
-            break
+        for output_thread in output_threads:
+            output_thread.join()
 
 
 if __name__ == "__main__":

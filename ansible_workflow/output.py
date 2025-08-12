@@ -468,6 +468,10 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
 
         def on_mount(self) -> None:
             workflow = self.outer_instance.get_workflow()
+
+            # Fetch the graph before building the UI
+            workflow.fetch_graph()
+
             tree = self.query_one(Tree)
             root_node_id = "_root"
             root_node = tree.root
