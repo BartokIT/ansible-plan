@@ -453,6 +453,7 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                 NodeStatus.SKIPPED: "[cyan]»[/cyan]",
             }
             self.node_spinners = {}
+            self.stdout_watcher = None
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -503,6 +504,10 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                     self._build_tree(workflow, child_id, child_tree_node)
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+            if self.stdout_watcher:
+                self.stdout_watcher.cancel()
+                self.stdout_watcher = None
+
             node_id = event.node.data
             workflow = self.outer_instance.get_workflow()
             node_obj = workflow.get_node_object(node_id)
@@ -518,8 +523,12 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
 """
                 details_panel.update(details)
                 self.show_stdout(node_obj)
+                if node_obj.get_status() == NodeStatus.RUNNING:
+                    self.stdout_watcher = self.watch_stdout(node_obj)
             elif isinstance(node_obj, BNode):
                 stdout_log = self.query_one("#playbook_stdout", RichLog)
+                stdout_log.display = False
+                stdout_log.display = True
                 stdout_log.clear()
                 node_data = workflow.get_node(node_id)[1]
                 strategy = node_data.get('block', {}).get('strategy', 'N/A')
@@ -543,7 +552,6 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                     if status == NodeStatus.RUNNING:
                         if node_id not in self.node_spinners:
                             self.node_spinners[node_id] = self.update_spinner(node)
-                        self.watch_stdout(node)
                     else:
                         if node_id in self.node_spinners:
                             self.node_spinners[node_id].cancel()
@@ -582,6 +590,8 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
         def show_stdout(self, node: PNode):
             """Reads and displays the entire stdout for a given node."""
             stdout_log = self.query_one("#playbook_stdout", RichLog)
+            stdout_log.display = False
+            stdout_log.display = True
             stdout_log.clear()
 
             artifact_dir = self.outer_instance.get_workflow().get_logging_dir()
@@ -614,16 +624,14 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             self.outer_instance._logger.info(f"Watching stdout for node {node.get_id()} at {stdout_path}")
 
             last_pos = 0
-            tree = self.query_one(Tree)
             while node.get_status() == NodeStatus.RUNNING:
-                if tree.cursor_node and tree.cursor_node.data == node.get_id():
-                    if os.path.exists(stdout_path):
-                        with open(stdout_path, "r") as f:
-                            f.seek(last_pos)
-                            new_content = f.read()
-                            if new_content:
-                                stdout_log.write(new_content)
-                                last_pos = f.tell()
+                if os.path.exists(stdout_path):
+                    with open(stdout_path, "r") as f:
+                        f.seek(last_pos)
+                        new_content = f.read()
+                        if new_content:
+                            stdout_log.write(new_content)
+                            last_pos = f.tell()
                 time.sleep(0.5)
 
             # Final read
