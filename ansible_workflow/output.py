@@ -460,7 +460,7 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             with Horizontal():
                 yield Tree("Workflow", id="workflow_tree", classes="sidebar")
                 with Vertical():
-                    yield DataTable(id="node_details")
+                    yield DataTable(id="node_details", show_cursor=False)
                     yield Rule()
                     yield RichLog(id="playbook_stdout", markup=True)
             yield Footer()
@@ -517,11 +517,11 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             details_table.clear()
 
             if isinstance(node_obj, PNode):
-                details_table.add_row("ID", node_obj.get_id())
-                details_table.add_row("Playbook", node_obj.get_playbook())
-                details_table.add_row("Inventory", getattr(node_obj, '_PNode__inventory', 'N/A'))
-                details_table.add_row("Description", node_obj.get_description())
-                details_table.add_row("Reference", node_obj.get_reference())
+                details_table.add_row("[b]ID[/b]", node_obj.get_id())
+                details_table.add_row("[b]Playbook[/b]", node_obj.get_playbook())
+                details_table.add_row("[b]Inventory[/b]", getattr(node_obj, '_PNode__inventory', 'N/A'))
+                details_table.add_row("[b]Description[/b]", node_obj.get_description())
+                details_table.add_row("[b]Reference[/b]", node_obj.get_reference())
                 self.show_stdout(node_obj)
                 if node_obj.get_status() == NodeStatus.RUNNING:
                     self.stdout_watcher = self.watch_stdout(node_obj)
@@ -529,12 +529,12 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                 stdout_log = self.query_one("#playbook_stdout", RichLog)
                 stdout_log.clear()
                 node_data = workflow.get_node(node_id)[1]
-                details_table.add_row("ID", node_obj.get_id())
-                details_table.add_row("Type", "Block")
-                details_table.add_row("Strategy", node_data.get('block', {}).get('strategy', 'N/A'))
+                details_table.add_row("[b]ID[/b]", node_obj.get_id())
+                details_table.add_row("[b]Type[/b]", "Block")
+                details_table.add_row("[b]Strategy[/b]", node_data.get('block', {}).get('strategy', 'N/A'))
             else:
                 # Details for root node or other types
-                details_table.add_row("ID", node_obj.get_id())
+                details_table.add_row("[b]ID[/b]", node_obj.get_id())
 
         def handle_workflow_event(self, event: WorkflowEvent):
             if event.get_type() == WorkflowEventType.NODE_EVENT:
