@@ -443,11 +443,11 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             self.spinner_icons = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
             self.status_icons = {
                 NodeStatus.NOT_STARTED: "○",
-                NodeStatus.PRE_RUNNING: "…",
-                NodeStatus.RUNNING: self.spinner_icons[0],
-                NodeStatus.ENDED: "✔",
-                NodeStatus.FAILED: "✖",
-                NodeStatus.SKIPPED: "»",
+                NodeStatus.PRE_RUNNING: "[yellow]…[/yellow]",
+                NodeStatus.RUNNING: "[yellow]○[/yellow]",
+                NodeStatus.ENDED: "[green]✔[/green]",
+                NodeStatus.FAILED: "[red]✖[/red]",
+                NodeStatus.SKIPPED: "[cyan]»[/cyan]",
             }
             self.node_spinners = {}
 
@@ -514,7 +514,16 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
 """
                 details_panel.update(details)
             elif isinstance(node_obj, BNode):
-                details_panel.update(f"[b]ID:[/b] {node_obj.get_id()}")
+                stdout_log = self.query_one("#playbook_stdout", RichLog)
+                stdout_log.clear()
+                node_data = workflow.get_node(node_id)[1]
+                strategy = node_data.get('block', {}).get('strategy', 'N/A')
+                details = f"""\
+[b]ID:[/b] {node_obj.get_id()}
+[b]Type:[/b] Block
+[b]Strategy:[/b] {strategy}
+"""
+                details_panel.update(details)
             else:
                 details_panel.update("Select a node to see details.")
 
@@ -525,12 +534,6 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
 
                 if node_id in self.tree_nodes:
                     tree_node = self.tree_nodes[node_id]
-                    icon = self.status_icons.get(status, " ")
-                    if isinstance(node, BNode):
-                        label = f"{icon} [b]{node_id}[/b]"
-                    else:
-                        label = f"{icon} {node_id}"
-                    tree_node.set_label(label)
 
                     if status == NodeStatus.RUNNING:
                         if node_id not in self.node_spinners:
@@ -540,6 +543,13 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                         if node_id in self.node_spinners:
                             self.node_spinners[node_id].cancel()
                             del self.node_spinners[node_id]
+
+                        icon = self.status_icons.get(status, " ")
+                        if isinstance(node, BNode):
+                            label = f"{icon} [b]{node_id}[/b]"
+                        else:
+                            label = f"{icon} {node_id}"
+                        tree_node.set_label(label)
 
             elif event.get_type() == WorkflowEventType.WORKFLOW_EVENT:
                 status, content = event.get_event()
@@ -554,7 +564,8 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             is_bnode = isinstance(node, BNode)
 
             while node.get_status() == NodeStatus.RUNNING:
-                icon = next(spinner_cycle)
+                icon_char = next(spinner_cycle)
+                icon = f"[yellow]{icon_char}[/yellow]"
                 if is_bnode:
                     label = f"{icon} [b]{node_id}[/b]"
                 else:
