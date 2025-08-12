@@ -7,3 +7,7 @@ wheel
 # uncomment to generate graph file
 # graphviz
 # pygraphviz
+textual
+rich
+jinja2
+ansible

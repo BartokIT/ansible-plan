@@ -29,7 +29,7 @@ from rich.console import Console
 from .exceptions import (AnsibleWorkflowLoadingError, AnsibleWorkflowValidationError, AnsibleWorkflowVaultScript,
                          ExitCodes, AnsibleWorkflowYAMLNotValid)
 from .loader import WorkflowYamlLoader
-from .output import CursesWorkflowOutput, StdoutWorkflowOutput, PngDrawflowOutput
+from .output import StdoutWorkflowOutput, PngDrawflowOutput, TextualWorkflowOutput
 from ansible.cli.arguments import option_helpers as opt_help
 from ansible.parsing.splitter import parse_kv
 
@@ -91,8 +91,8 @@ def read_options():
     opt_help.add_runtask_options(parser)
 
     # influences the output
-    parser.add_argument('--mode', default='stdout', choices=["stdout", "interactive"],
-                        help='Render the progress using curses or stdout.')
+    parser.add_argument('--mode', default='stdout', choices=["stdout", "textual"],
+                        help='Render the progress using textual or stdout.')
 
     parser.add_argument('-d', '--draw', dest='draw_png', action='store_true',
                         help='Output also a PNG of the graph inside the log folder')
@@ -165,21 +165,6 @@ def main():
         print("Unsupported workflow format file %s" % cmd_args.workflow, file=sys.stderr)
         sys.exit(ExitCodes.WORKFLOW_FILE_TYPE_NOT_SUPPORTED.value)
 
-    output_threads = []
-    if cmd_args.mode == 'interactive' and not cmd_args.verify_only:
-        gui_thread = CursesWorkflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
-        gui_thread.start()
-        output_threads.append(gui_thread)
-    elif cmd_args.mode == 'stdout' or cmd_args.verify_only:
-        stdout_thread = StdoutWorkflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
-        stdout_thread.start()
-        output_threads.append(stdout_thread)
-
-    if cmd_args.draw_png:
-        png_thread = PngDrawflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
-        png_thread.start()
-        output_threads.append(png_thread)
-
     # run the workflow
     if cmd_args.filter_nodes != "":
         filtered_nodes = cmd_args.filter_nodes.split(",")
@@ -191,25 +176,38 @@ def main():
     start_from_node = cmd_args.start_from_node if cmd_args.start_from_node else '_s'
     end_to_node = cmd_args.end_to_node if cmd_args.end_to_node else '_e'
 
-    def signal_handler(sig, frame):
-        console = Console()
-        y_or_n = console.input(' Do you want to quit the software?')
-        if not aw.is_stopping():
-            while y_or_n.lower() != 'y' and y_or_n.lower() != 'n' :
-                y_or_n = console.input(' Do you want to quit the software? [y/n]')
-            if y_or_n == 'y':
-                console.print(" Workflow stopping, please wait that running playbooks end.")
-                aw.stop()
+    if cmd_args.mode == 'textual' and not cmd_args.verify_only:
+        output = TextualWorkflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
+        output.run(start_node=start_from_node, end_node=end_to_node, verify_only=cmd_args.verify_only)
+    else:
+        output_threads = []
+        if cmd_args.mode == 'stdout' or cmd_args.verify_only:
+            stdout_thread = StdoutWorkflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
+            stdout_thread.start()
+            output_threads.append(stdout_thread)
+
+        if cmd_args.draw_png:
+            png_thread = PngDrawflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
+            png_thread.start()
+            output_threads.append(png_thread)
+
+        def signal_handler(sig, frame):
+            console = Console()
+            y_or_n = console.input(' Do you want to quit the software?')
+            if not aw.is_stopping():
+                while y_or_n.lower() != 'y' and y_or_n.lower() != 'n' :
+                    y_or_n = console.input(' Do you want to quit the software? [y/n]')
+                if y_or_n == 'y':
+                    console.print(" Workflow stopping, please wait that running playbooks end.")
+                    aw.stop()
 
 
-    signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
 
-    aw.run(start_node=start_from_node, end_node=end_to_node, verify_only=cmd_args.verify_only)
+        aw.run(start_node=start_from_node, end_node=end_to_node, verify_only=cmd_args.verify_only)
 
-
-    # wait termination of thread
-    for output_thread in output_threads:
-        output_thread.join()
+        for output_thread in output_threads:
+            output_thread.join()
 
 
 if __name__ == "__main__":

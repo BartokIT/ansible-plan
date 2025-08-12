@@ -1,4 +1,3 @@
-import curses
 from enum import Enum
 import threading
 import itertools
@@ -16,13 +15,12 @@ from .workflow import (AnsibleWorkflow, BNode, NodeStatus, PNode, WorkflowEvent,
 from rich.console import Console
 from rich.table import Table
 import sys
-
-class CursesGuiChar(Enum):
-    """ Define the character for the application"""
-    SERIAL_FIRST_ITEM = '┬'
-    SERIAL_MIDDLE_ITEM = '├'
-    SERIAL_END_ITEM = '└'
-
+from textual.app import App, ComposeResult
+from textual.widgets import Header, Footer, Static, Tree, RichLog
+from textual.containers import Container, Horizontal, Vertical
+from textual import work
+from textual.reactive import reactive
+import time
 
 class WorkflowOutput(threading.Thread):
     '''
@@ -333,181 +331,6 @@ class StdoutWorkflowOutput(WorkflowOutput, WorkflowListener):
             self._print_event(event)
 
 
-class CursesWorkflowOutput(WorkflowOutput, WorkflowListener):
-    _log_name = 'curses.log'
-
-    def __init__(self, workflow, event, logging_dir, log_level, cmd_args):
-        super().__init__(workflow, event, logging_dir, log_level, cmd_args)
-        self.get_workflow().add_event_listener(self)
-        self.__main_window = None
-        self.__progress_window = None
-        self.__progress_window_width = 35
-        self.__messages_window_height = 5
-        self.__window_margin = 3
-        self.__row = 0
-        self.__spinner_template = ['-', '/', '|', '\\']
-        self.__spinners = {}
-        self.__status_map = {NodeStatus.NOT_STARTED: {'label': 'not started', 'color': 1},
-                             NodeStatus.RUNNING: {'label': 'running', 'color': 2},
-                             NodeStatus.FAILED: {'label': 'failed', 'color': 3},
-                             NodeStatus.ENDED: {'label': 'ended', 'color': 4},
-                             NodeStatus.SKIPPED: {'label': 'ended', 'color': 5}}
-        self.__messages = []
-        self.set_run_wrapper(curses.wrapper)
-
-    def __define_color(self):
-        curses.start_color()
-        curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_WHITE, -1)  # not started
-        curses.init_pair(2, curses.COLOR_YELLOW, -1)  # running
-        curses.init_pair(3, curses.COLOR_RED, -1)  # failed
-        curses.init_pair(4, curses.COLOR_GREEN, -1)  # ended
-        curses.init_pair(5, curses.COLOR_CYAN, -1)  # ended
-
-    def notify_event(self, event: WorkflowEvent):
-        self._logger.debug("Event received: %s" % event)
-
-        if event.get_type() == WorkflowEventType.WORKFLOW_EVENT:
-            type, text = event.get_event()
-            self.__messages.append(text)
-
-    def draw_init(self, stdscr):
-        ''' Draw initialization'''
-        # define curses color
-        stdscr.clear()
-        self.__define_color()
-        self.__max_y, self.__max_x = stdscr.getmaxyx()
-        self._logger.info("Maximum width: %s height: %s" % (self.__max_x, self.__max_y))
-        self.__main_window = curses.newwin(self.__max_y - self.__window_margin - self.__messages_window_height,
-                                           self.__max_x - self.__window_margin - self.__progress_window_width,
-                                           self.__window_margin, self.__window_margin)
-        self.__progress_window = curses.newwin(self.__max_y - self.__window_margin - self.__messages_window_height,
-                                               self.__progress_window_width,
-                                               self.__window_margin,
-                                               self.__max_x - self.__window_margin - self.__progress_window_width)
-        self.__messages_window = curses.newwin(self.__messages_window_height,
-                                               self.__max_x - self.__window_margin,
-                                               self.__max_y - self.__window_margin - self.__messages_window_height, self.__window_margin)
-        self.__main_window.clear()
-        self.__progress_window.clear()
-        self.__messages_window.clear()
-        self.__print_tree(['_root'])
-        self.__main_window.refresh()
-        self.__messages_window.refresh()
-
-    def draw_end(self, *args, **kwargs):
-        ''' Draw ending'''
-        self._logger.info("Wait for exit")
-        curses.halfdelay(5)
-        curses.napms(self._refresh_interval)
-        wait = True
-
-        i = 0
-        self.__messages_window.clear()
-        self.__main_window.clear()
-        for message in self.__messages:
-            self._logger.info("Message %s" % message)
-            self.__messages_window.addstr(i, 0, "%s" % message)
-            i = i + 1
-        self.__row = 0
-        self.__print_tree(['_root'])
-        self.__messages_window.addstr(i + 1, 0, "Press Q to exit")
-        self.__main_window.refresh()
-        self.__messages_window.refresh()
-
-        while wait:
-            char = self.__messages_window.getch()
-            if char != curses.ERR:
-                if chr(char) == 'q':
-                    wait = False
-        self._logger.info("End of visualization")
-
-    def draw_step(self):
-        ''' Draw the workflow'''
-        self.__progress_window.clear()
-        self.__row = 0
-        self.__print_tree(['_root'])
-        self.__progress_window.refresh()
-
-    def draw_pause(self):
-        ''' Need to be implemented to pause after a draw step'''
-        curses.napms(self._refresh_interval)
-
-    def __print_tree(self, nodes, prev_latest=False, level=0, prefix=''):
-        ''' Print the tree representing the workflow'''
-        for inode in nodes:
-            # selection of char for current node
-            current_char = '├'
-            previous_char = '│'
-            next_prefix = ''
-
-            if nodes[-1] == inode:  # latest element
-                current_char = '└'
-
-                if nodes[0] == inode:  # is composed by one element
-                    current_char = '─'
-                    if not prev_latest:
-                        previous_char = '├'
-                else:
-                    if prev_latest:
-                        previous_char = ' '
-            elif nodes[0] == inode:  # is the first
-                current_char = '┬'
-                if prev_latest:
-                    previous_char = '└'
-                else:
-                    previous_char = '├'
-            elif prev_latest:
-                previous_char = ' '
-
-            # prefix
-            if level > 0:
-                next_prefix = '│'
-                if prev_latest:
-                    next_prefix = ' '
-
-            if isinstance(self.get_workflow().get_node_object(inode), BNode):
-                self.__print_tree([n for p, n in self.get_workflow().get_original_graph().out_edges(inode)],
-                                  prev_latest=(nodes[-1] == inode), level=(level + 1),
-                                  prefix=prefix + next_prefix)
-            else:
-                if level == 0:
-                    previous_char = ''
-
-                # draw tree node
-                tree_string = "%s%s%s %s - %s" % (prefix, previous_char, current_char,
-                                                  self.get_workflow().get_node_object(inode).get_id(),
-                                                  self.get_workflow().get_node_object(inode).get_playbook())
-                self.__main_window.addstr(self.__row, 0, tree_string)
-
-                # draw filling dots
-                self.__main_window.addstr(self.__row,
-                                          len(tree_string.strip()) + 1,
-                                          "." * (self.__max_x - len(tree_string.strip()) - 5 - self.__window_margin - self.__progress_window_width))
-
-                # draw status
-                node_object = self.get_workflow().get_node_object(inode)
-                node_status = node_object.get_status()
-                status_label = self.__status_map[node_status]['label']
-                status_color = self.__status_map[node_status]['color']
-                self.__progress_window.addstr(self.__row, 5, "%s" % status_label, curses.color_pair(status_color))
-
-                # draw spinner
-                if inode not in self.__spinners:
-                    self.__spinners[node_object.get_id()] = itertools.cycle(self.__spinner_template)
-
-                if node_status == NodeStatus.RUNNING:
-                    self.__progress_window.addstr(self.__row, 1, "[%s]" % next(self.__spinners[inode]), curses.color_pair(status_color))
-
-                # draw spinner
-                if node_object.get_telemetry()['started']:
-                    self.__progress_window.addstr(self.__row, 13, "[%s]" % node_object.get_telemetry()['started'])
-                if node_object.get_telemetry()['ended']:
-                    self.__progress_window.addstr(self.__row, 22, "-%s]" % node_object.get_telemetry()['ended'])
-                self.__row = self.__row + 1
-
-
-
 def nudge(pos, x_shift, y_shift):
     return {n: (x + x_shift, y + y_shift) for n, (x, y) in pos.items()}
 
@@ -577,3 +400,162 @@ class PngDrawflowOutput(WorkflowOutput):
     def draw_end(self):
         self.draw_graph(True)
         self._logger.debug("png output ends")
+
+
+class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
+    _log_name = 'textual.log'
+
+    def __init__(self, workflow, event, logging_dir, log_level, cmd_args):
+        super().__init__(workflow, event, logging_dir, log_level, cmd_args)
+        # We are not using the base class run loop, so we don't need to set the run_wrapper
+        self.get_workflow().add_event_listener(self)
+        self.app = self.WorkflowApp(self)
+
+    def run(self, start_node, end_node, verify_only):
+        """
+        This method is called directly from __main__.py for textual mode.
+        It launches the Textual app. The app itself will then start the
+        workflow in a background thread.
+        """
+        self.app.start_node = start_node
+        self.app.end_node = end_node
+        self.app.verify_only = verify_only
+        self.app.run()
+
+    def notify_event(self, event: WorkflowEvent):
+        # This is called from the workflow thread
+        self._logger.debug("Event received: %s" % event)
+        self.app.handle_workflow_event(event)
+
+    class WorkflowApp(App):
+        CSS = """
+        .sidebar {
+            width: 40;
+            height: 100%;
+            dock: left;
+        }
+        """
+
+        def __init__(self, outer_instance):
+            super().__init__()
+            self.outer_instance = outer_instance
+            self.tree_nodes = {}
+
+        def compose(self) -> ComposeResult:
+            yield Header()
+            with Horizontal():
+                yield Tree("Workflow", id="workflow_tree", classes="sidebar")
+                with Vertical():
+                    yield Static("Node Details", id="node_details")
+                    yield RichLog(id="playbook_stdout", markup=True)
+            yield Footer()
+
+        def on_mount(self) -> None:
+            workflow = self.outer_instance.get_workflow()
+            tree = self.query_one(Tree)
+            root_node_id = "_root"
+            root_node = tree.root
+            root_node.data = root_node_id
+            self.tree_nodes[root_node_id] = root_node
+            self._build_tree(workflow, root_node_id, root_node)
+            self.run_workflow()
+
+        @work(thread=True)
+        def run_workflow(self):
+            self.outer_instance.get_workflow().run(
+                start_node=self.start_node,
+                end_node=self.end_node,
+                verify_only=self.verify_only
+            )
+
+        def _build_tree(self, workflow, node_id, tree_node):
+            for child_id in workflow.get_original_graph().successors(node_id):
+                if child_id in ['_s', '_e']:
+                    continue
+                child_node_obj = workflow.get_node_object(child_id)
+                if isinstance(child_node_obj, BNode):
+                    label = f"[b]{child_node_obj.get_id()}[/b]"
+                else:
+                    label = f"{child_node_obj.get_id()}"
+
+                child_tree_node = tree_node.add(label, data=child_id)
+                self.tree_nodes[child_id] = child_tree_node
+
+                if workflow.get_original_graph().out_degree(child_id) > 0:
+                    self._build_tree(workflow, child_id, child_tree_node)
+
+        def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+            node_id = event.node.data
+            workflow = self.outer_instance.get_workflow()
+            node_obj = workflow.get_node_object(node_id)
+            details_panel = self.query_one("#node_details", Static)
+
+            if isinstance(node_obj, PNode):
+                details = f"""\
+[b]ID:[/b] {node_obj.get_id()}
+[b]Playbook:[/b] {node_obj.get_playbook()}
+[b]Inventory:[/b] {getattr(node_obj, '_PNode__inventory', 'N/A')}
+[b]Description:[/b] {node_obj.get_description()}
+[b]Reference:[/b] {node_obj.get_reference()}
+"""
+                details_panel.update(details)
+            elif isinstance(node_obj, BNode):
+                details_panel.update(f"[b]ID:[/b] {node_obj.get_id()}")
+            else:
+                details_panel.update("Select a node to see details.")
+
+        def handle_workflow_event(self, event: WorkflowEvent):
+            if event.get_type() == WorkflowEventType.NODE_EVENT:
+                status, node = event.get_event()
+                node_id = node.get_id()
+                if node_id in self.tree_nodes:
+                    tree_node = self.tree_nodes[node_id]
+
+                    status_map = {
+                        NodeStatus.RUNNING: ("[yellow]running[/yellow]", "yellow"),
+                        NodeStatus.ENDED: ("[green]completed[/green]", "green"),
+                        NodeStatus.FAILED: ("[red]failed[/red]", "red"),
+                        NodeStatus.SKIPPED: ("[cyan]skipped[/cyan]", "cyan"),
+                    }
+
+                    if status in status_map:
+                        label, color = status_map[status]
+                        tree_node.set_label(f"{node_id} - {label}")
+
+                    if status == NodeStatus.RUNNING:
+                        self.watch_stdout(node)
+
+            elif event.get_type() == WorkflowEventType.WORKFLOW_EVENT:
+                status, content = event.get_event()
+                # You can add logic here to handle workflow-level events, e.g., display a notification
+                pass
+
+        @work(exclusive=True, thread=True)
+        def watch_stdout(self, node: PNode):
+            stdout_log = self.query_one("#playbook_stdout", RichLog)
+            stdout_log.clear()
+
+            artifact_dir = self.outer_instance.get_workflow().get_logging_dir()
+            ident = getattr(node, 'ident', node.get_id())
+            stdout_path = os.path.join(artifact_dir, ident, "stdout")
+
+            self.outer_instance._logger.info(f"Watching stdout for node {node.get_id()} at {stdout_path}")
+
+            last_pos = 0
+            while node.get_status() == NodeStatus.RUNNING:
+                if os.path.exists(stdout_path):
+                    with open(stdout_path, "r") as f:
+                        f.seek(last_pos)
+                        new_content = f.read()
+                        if new_content:
+                            stdout_log.write(new_content)
+                            last_pos = f.tell()
+                time.sleep(0.5)
+
+            # Final read
+            if os.path.exists(stdout_path):
+                with open(stdout_path, "r") as f:
+                    f.seek(last_pos)
+                    new_content = f.read()
+                    if new_content:
+                        stdout_log.write(new_content)
