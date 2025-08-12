@@ -16,7 +16,7 @@ from rich.console import Console
 from rich.table import Table
 import sys
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Tree, RichLog
+from textual.widgets import Header, Footer, Static, Tree, RichLog, Rule
 from textual.containers import Container, Horizontal, Vertical
 from textual import work
 from textual.reactive import reactive
@@ -457,6 +457,7 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                 yield Tree("Workflow", id="workflow_tree", classes="sidebar")
                 with Vertical():
                     yield Static("Node Details", id="node_details")
+                    yield Rule()
                     yield RichLog(id="playbook_stdout", markup=True)
             yield Footer()
 
