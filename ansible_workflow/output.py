@@ -518,21 +518,29 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             details_table.clear()
 
             if isinstance(node_obj, PNode):
-                details_table.add_row(node_obj.get_id(), label=Text("ID", style="bold"))
-                details_table.add_row(node_obj.get_playbook(), label=Text("Playbook", style="bold"))
-                details_table.add_row(getattr(node_obj, '_PNode__inventory', 'N/A'), label=Text("Inventory", style="bold"))
-                details_table.add_row(node_obj.get_description(), label=Text("Description", style="bold"))
-                details_table.add_row(node_obj.get_reference(), label=Text("Reference", style="bold"))
+                def add_pnode_detail(key, value):
+                    height = str(value).count('\n') + 1
+                    details_table.add_row(value, label=Text(key, style="bold"), height=height)
+
+                add_pnode_detail("ID", node_obj.get_id())
+                add_pnode_detail("Playbook", node_obj.get_playbook())
+                add_pnode_detail("Inventory", getattr(node_obj, '_PNode__inventory', 'N/A'))
+                add_pnode_detail("Description", node_obj.get_description())
+                add_pnode_detail("Reference", node_obj.get_reference())
                 self.show_stdout(node_obj)
                 if node_obj.get_status() == NodeStatus.RUNNING:
                     self.stdout_watcher = self.watch_stdout(node_obj)
             elif isinstance(node_obj, BNode):
+                def add_bnode_detail(key, value):
+                    height = str(value).count('\n') + 1
+                    details_table.add_row(value, label=Text(key, style="bold"), height=height)
+
                 stdout_log = self.query_one("#playbook_stdout", RichLog)
                 stdout_log.clear()
                 node_data = workflow.get_node(node_id)[1]
-                details_table.add_row(node_obj.get_id(), label=Text("ID", style="bold"))
-                details_table.add_row("Block", label=Text("Type", style="bold"))
-                details_table.add_row(node_data.get('block', {}).get('strategy', 'N/A'), label=Text("Strategy", style="bold"))
+                add_bnode_detail("ID", node_obj.get_id())
+                add_bnode_detail("Type", "Block")
+                add_bnode_detail("Strategy", node_data.get('block', {}).get('strategy', 'N/A'))
             else:
                 # Details for root node or other types
                 details_table.add_row(node_obj.get_id(), label=Text("ID", style="bold"))
