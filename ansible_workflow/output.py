@@ -434,6 +434,9 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             height: 100%;
             dock: left;
         }
+        #playbook_stdout {
+            background: $surface;
+        }
         """
 
         def __init__(self, outer_instance):
