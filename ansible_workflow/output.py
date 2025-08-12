@@ -14,9 +14,10 @@ from .workflow import (AnsibleWorkflow, BNode, NodeStatus, PNode, WorkflowEvent,
                        WorkflowStatus, WorkflowEventType)
 from rich.console import Console
 from rich.table import Table
+from rich.text import Text
 import sys
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Tree, RichLog
+from textual.widgets import Header, Footer, Static, Tree, RichLog, Rule, DataTable
 from textual.containers import Container, Horizontal, Vertical
 from textual import work
 from textual.reactive import reactive
@@ -434,19 +435,34 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             height: 100%;
             dock: left;
         }
+        #playbook_stdout {
+            background: $surface;
+        }
         """
 
         def __init__(self, outer_instance):
             super().__init__()
             self.outer_instance = outer_instance
             self.tree_nodes = {}
+            self.spinner_icons = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+            self.status_icons = {
+                NodeStatus.NOT_STARTED: "○",
+                NodeStatus.PRE_RUNNING: "[yellow]…[/yellow]",
+                NodeStatus.RUNNING: "[yellow]○[/yellow]",
+                NodeStatus.ENDED: "[green]✔[/green]",
+                NodeStatus.FAILED: "[red]✖[/red]",
+                NodeStatus.SKIPPED: "[cyan]»[/cyan]",
+            }
+            self.node_spinners = {}
+            self.stdout_watcher = None
 
         def compose(self) -> ComposeResult:
             yield Header()
             with Horizontal():
                 yield Tree("Workflow", id="workflow_tree", classes="sidebar")
                 with Vertical():
-                    yield Static("Node Details", id="node_details")
+                    yield DataTable(id="node_details", show_cursor=False, show_header=False)
+                    yield Rule()
                     yield RichLog(id="playbook_stdout", markup=True)
             yield Footer()
 
@@ -456,8 +472,12 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             root_node_id = "_root"
             root_node = tree.root
             root_node.data = root_node_id
+            root_node.set_label(f"{self.status_icons.get(NodeStatus.NOT_STARTED, ' ')} Workflow")
             self.tree_nodes[root_node_id] = root_node
+            details_table = self.query_one("#node_details", DataTable)
+            details_table.add_column("Value", width=100)
             self._build_tree(workflow, root_node_id, root_node)
+            tree.root.expand_all()
             self.run_workflow()
 
         @work(thread=True)
@@ -473,62 +493,128 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
                 if child_id in ['_s', '_e']:
                     continue
                 child_node_obj = workflow.get_node_object(child_id)
+                allow_expand = isinstance(child_node_obj, BNode)
                 if isinstance(child_node_obj, BNode):
                     label = f"[b]{child_node_obj.get_id()}[/b]"
                 else:
-                    label = f"{child_node_obj.get_id()}"
+                    icon = self.status_icons.get(child_node_obj.get_status(), " ")
+                    label = f"{icon} {child_node_obj.get_id()}"
 
-                child_tree_node = tree_node.add(label, data=child_id)
+                child_tree_node = tree_node.add(label, data=child_id, allow_expand=allow_expand)
                 self.tree_nodes[child_id] = child_tree_node
 
                 if workflow.get_original_graph().out_degree(child_id) > 0:
                     self._build_tree(workflow, child_id, child_tree_node)
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
+            if self.stdout_watcher:
+                self.stdout_watcher.cancel()
+                self.stdout_watcher = None
+
             node_id = event.node.data
             workflow = self.outer_instance.get_workflow()
             node_obj = workflow.get_node_object(node_id)
-            details_panel = self.query_one("#node_details", Static)
+            details_table = self.query_one("#node_details", DataTable)
+            details_table.clear()
 
             if isinstance(node_obj, PNode):
-                details = f"""\
-[b]ID:[/b] {node_obj.get_id()}
-[b]Playbook:[/b] {node_obj.get_playbook()}
-[b]Inventory:[/b] {getattr(node_obj, '_PNode__inventory', 'N/A')}
-[b]Description:[/b] {node_obj.get_description()}
-[b]Reference:[/b] {node_obj.get_reference()}
-"""
-                details_panel.update(details)
+                def add_pnode_detail(key, value):
+                    height = str(value).count('\n') + 1
+                    details_table.add_row(value, label=Text(key, style="bold"), height=height)
+
+                add_pnode_detail("ID", node_obj.get_id())
+                add_pnode_detail("Playbook", node_obj.get_playbook())
+                add_pnode_detail("Inventory", getattr(node_obj, '_PNode__inventory', 'N/A'))
+                add_pnode_detail("Description", node_obj.get_description())
+                add_pnode_detail("Reference", node_obj.get_reference())
+                self.show_stdout(node_obj)
+                if node_obj.get_status() == NodeStatus.RUNNING:
+                    self.stdout_watcher = self.watch_stdout(node_obj)
             elif isinstance(node_obj, BNode):
-                details_panel.update(f"[b]ID:[/b] {node_obj.get_id()}")
+                def add_bnode_detail(key, value):
+                    height = str(value).count('\n') + 1
+                    details_table.add_row(value, label=Text(key, style="bold"), height=height)
+
+                stdout_log = self.query_one("#playbook_stdout", RichLog)
+                stdout_log.clear()
+                node_data = workflow.get_node(node_id)[1]
+                add_bnode_detail("ID", node_obj.get_id())
+                add_bnode_detail("Type", "Block")
+                add_bnode_detail("Strategy", node_data.get('block', {}).get('strategy', 'N/A'))
             else:
-                details_panel.update("Select a node to see details.")
+                # Details for root node or other types
+                details_table.add_row(node_obj.get_id(), label=Text("ID", style="bold"))
 
         def handle_workflow_event(self, event: WorkflowEvent):
             if event.get_type() == WorkflowEventType.NODE_EVENT:
                 status, node = event.get_event()
                 node_id = node.get_id()
+
                 if node_id in self.tree_nodes:
                     tree_node = self.tree_nodes[node_id]
 
-                    status_map = {
-                        NodeStatus.RUNNING: ("[yellow]running[/yellow]", "yellow"),
-                        NodeStatus.ENDED: ("[green]completed[/green]", "green"),
-                        NodeStatus.FAILED: ("[red]failed[/red]", "red"),
-                        NodeStatus.SKIPPED: ("[cyan]skipped[/cyan]", "cyan"),
-                    }
-
-                    if status in status_map:
-                        label, color = status_map[status]
-                        tree_node.set_label(f"{node_id} - {label}")
-
                     if status == NodeStatus.RUNNING:
-                        self.watch_stdout(node)
+                        if node_id not in self.node_spinners:
+                            self.node_spinners[node_id] = self.update_spinner(node)
+                    else:
+                        if node_id in self.node_spinners:
+                            self.node_spinners[node_id].cancel()
+                            del self.node_spinners[node_id]
+
+                        if isinstance(node, BNode):
+                            label = f"[b]{node_id}[/b]"
+                        else:
+                            icon = self.status_icons.get(status, " ")
+                            label = f"{icon} {node_id}"
+                        tree_node.set_label(label)
 
             elif event.get_type() == WorkflowEventType.WORKFLOW_EVENT:
                 status, content = event.get_event()
                 # You can add logic here to handle workflow-level events, e.g., display a notification
                 pass
+
+        @work(thread=True)
+        def update_spinner(self, node: PNode):
+            node_id = node.get_id()
+            tree_node = self.tree_nodes[node_id]
+            spinner_cycle = itertools.cycle(self.spinner_icons)
+            is_bnode = isinstance(node, BNode)
+
+            while node.get_status() == NodeStatus.RUNNING:
+                icon_char = next(spinner_cycle)
+                icon = f"[yellow]{icon_char}[/yellow]"
+                if is_bnode:
+                    label = f"{icon} [b]{node_id}[/b]"
+                else:
+                    label = f"{icon} {node_id}"
+                tree_node.set_label(label)
+                time.sleep(0.1)
+
+        @work(exclusive=True, thread=True)
+        def show_stdout(self, node: PNode):
+            """Reads and displays the entire stdout for a given node."""
+            stdout_log = self.query_one("#playbook_stdout", RichLog)
+            stdout_log.display = False
+            stdout_log.display = True
+            stdout_log.clear()
+
+            artifact_dir = self.outer_instance.get_workflow().get_logging_dir()
+            # The 'ident' is the actual directory name used by ansible-runner, which
+            # can be different from the node_id if the node is re-run.
+            ident = getattr(node, 'ident', node.get_id())
+            stdout_path = os.path.join(artifact_dir, ident, "stdout")
+
+            self.outer_instance._logger.info(f"Showing stdout for node {node.get_id()} from {stdout_path}")
+
+            if os.path.exists(stdout_path):
+                with open(stdout_path, "r") as f:
+                    content = f.read()
+                    width = stdout_log.size.width
+                    padded_lines = [line.ljust(width) for line in content.splitlines()]
+                    padded_content = "\n".join(padded_lines)
+                    stdout_log.write(padded_content)
+            else:
+                stdout_log.write("No standard output available for this node (it may not have run yet).")
 
         @work(exclusive=True, thread=True)
         def watch_stdout(self, node: PNode):
