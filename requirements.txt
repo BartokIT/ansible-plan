@@ -11,3 +11,7 @@ textual
 rich
 jinja2
 ansible
+fastapi
+uvicorn
+python-multipart
+requests

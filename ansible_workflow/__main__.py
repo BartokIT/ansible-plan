@@ -26,6 +26,12 @@ import threading
 import jinja2
 import signal
 from rich.console import Console
+import requests
+import subprocess
+import time
+import json
+import uvicorn
+
 from .exceptions import (AnsibleWorkflowLoadingError, AnsibleWorkflowValidationError, AnsibleWorkflowVaultScript,
                          ExitCodes, AnsibleWorkflowYAMLNotValid)
 from .loader import WorkflowYamlLoader
@@ -33,6 +39,9 @@ from .output import StdoutWorkflowOutput, PngDrawflowOutput, TextualWorkflowOutp
 from ansible.cli.arguments import option_helpers as opt_help
 from ansible.parsing.splitter import parse_kv
 
+BACKEND_HOST = "127.0.0.1"
+BACKEND_PORT = 8088
+BACKEND_URL = f"http://{BACKEND_HOST}:{BACKEND_PORT}"
 
 def define_logger(logging_dir, level):
     logger_file_path = os.path.join(logging_dir, 'main.log')
@@ -55,7 +64,12 @@ def define_logger(logging_dir, level):
 
 def read_options():
     parser = argparse.ArgumentParser(description='This programs mimics the AWX/Ansible Tower® workflows from command line.')
-    parser.add_argument('workflow', type=str, help='Workflow file')
+    parser.add_argument('workflow', type=str, nargs='?', default=None, help='Workflow file')
+
+    # Backend commands
+    parser.add_argument('--start-backend', action='store_true', help='Start the backend server.')
+    parser.add_argument('--terminate-when-done', action='store_true', help='Terminate backend when workflow is done.')
+
 
     # influences workflow execution
     group = parser.add_mutually_exclusive_group()
@@ -103,8 +117,8 @@ def read_options():
     parser.add_argument('-size', '--draw-size', dest='draw_size', default=10, type=int,
                         help='Choose the size of the draw graph')
 
-    parser.add_argument('--log-dir', dest='log_dir', default='/var/log/ansible/workflows',
-                        help='set the parent output logging directory. defaults to /var/log/ansible/workflows/[workflow name]-[execution time]')
+    parser.add_argument('--log-dir', dest='log_dir', default='logs',
+                        help='set the parent output logging directory. defaults to logs/[workflow name]-[execution time]')
 
     parser.add_argument('--log-dir-no-info', dest='log_dir_no_info', action='store_true',
                         help='Does not add the workflow name and the execution time to the log dir name')
@@ -123,8 +137,50 @@ def keyvalue(value):
         raise Exception('Key value malformatted: key=value, missing the "="')
     return value.split('=')
 
+def is_backend_running():
+    try:
+        response = requests.get(f"{BACKEND_URL}/status")
+        return response.status_code == 200
+    except requests.ConnectionError:
+        return False
+
+def start_backend(terminate_when_done=False):
+    cmd = [sys.executable, "-m", "ansible_workflow", "--start-backend"]
+    if terminate_when_done:
+        cmd.append("--terminate-when-done")
+
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # Wait for backend to start
+    for _ in range(10):
+        if is_backend_running():
+            return True
+        time.sleep(0.5)
+    return False
+
 def main():
     cmd_args = read_options()
+
+    if cmd_args.start_backend:
+        # This is the backend process
+        # I need to find a way to pass --terminate-when-done to the backend app
+        # For now, I'll handle it in the backend code directly.
+        os.environ["TERMINATE_WHEN_DONE"] = "1" if cmd_args.terminate_when_done else "0"
+        uvicorn.run("ansible_workflow.backend:app", host=BACKEND_HOST, port=BACKEND_PORT, log_level="info")
+        return
+
+    if not cmd_args.workflow:
+        print("Error: workflow file argument is required.", file=sys.stderr)
+        sys.exit(ExitCodes.WORKFLOW_FILE_TYPE_NOT_SUPPORTED.value)
+
+    # This is the frontend CLI
+    if not is_backend_running():
+        print("Backend not running. Starting it now...")
+        if not start_backend(terminate_when_done=True):
+            print("Error: Could not start backend.", file=sys.stderr)
+            sys.exit(1)
+        print("Backend started.")
+
     extra_vars = {}
     for single_extra_vars in cmd_args.extra_vars:
         extra_vars.update(parse_kv(single_extra_vars))
@@ -135,79 +191,70 @@ def main():
     if not cmd_args.log_dir_no_info:
         logging_dir += "/%s_%s" % (os.path.basename(cmd_args.workflow), datetime.now().strftime("%Y%m%d_%H%M%S"))
 
-    logger = define_logger(logging_dir, cmd_args.log_level)
-    aw = None
-    if cmd_args.workflow.endswith('.yml'):
+    payload = {
+        "workflow_file": os.path.abspath(cmd_args.workflow),
+        "extra_vars": extra_vars,
+        "input_templating": input_templating,
+        "check_mode": cmd_args.check_mode,
+        "verbosity": cmd_args.verbosity,
+        "start_from_node": cmd_args.start_from_node if cmd_args.start_from_node else '_s',
+        "end_to_node": cmd_args.end_to_node if cmd_args.end_to_node else '_e',
+        "filter_nodes": cmd_args.filter_nodes.split(",") if cmd_args.filter_nodes else [],
+        "skip_nodes": cmd_args.skip_nodes.split(",") if cmd_args.skip_nodes else [],
+        "log_dir": logging_dir,
+        "log_level": cmd_args.log_level,
+    }
+
+    try:
+        response = requests.post(f"{BACKEND_URL}/workflow", json=payload)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(f"Error starting workflow: {e}", file=sys.stderr)
+        if e.response:
+            print(f"Backend response: {e.response.text}", file=sys.stderr)
+        sys.exit(1)
+
+    print("Workflow started. Polling for status...")
+
+    def signal_handler(sig, frame):
+        console = Console()
+        y_or_n = console.input('Do you want to stop the workflow? [y/n] ')
+        if y_or_n.lower() == 'y':
+            try:
+                requests.delete(f"{BACKEND_URL}/workflow")
+                console.print("Workflow stopping request sent.")
+            except requests.exceptions.RequestException as e:
+                console.print(f"Error stopping workflow: {e}")
+
+    signal.signal(signal.SIGINT, signal_handler)
+
+    while True:
         try:
-            wl = WorkflowYamlLoader(cmd_args.workflow, logging_dir, cmd_args.log_level, input_templating, cmd_args.check_mode, cmd_args.verbosity)
-            aw = wl.parse(extra_vars)
-        except AnsibleWorkflowVaultScript as vserr:
-            print("Vault script error.\n%s" % vserr, file=sys.stderr)
-            sys.exit(ExitCodes.VAULT_SCRIPT_ABSENT.value)
-        except AnsibleWorkflowValidationError as valerr:
-            logger.fatal("Impossible to parse the workflow. See loader log for details")
-            print("Wrong workflow format.\n%s" % str(valerr), file=sys.stderr)
-            sys.exit(ExitCodes.VALIDATION_ERROR.value)
-        except AnsibleWorkflowYAMLNotValid as yerr:
-            logger.fatal("Impossible to parse the workflow. See loader log for details")
-            print("Wrong YAML format.\n%s" % str(yerr), file=sys.stderr)
-            sys.exit(ExitCodes.YAML_NOT_VALID.value)
-        except AnsibleWorkflowLoadingError as lerr:
-            logger.fatal("Impossible to parse the workflow. See loader log for details")
-            print("Wrong YAML format.\n%s" % str(lerr), file=sys.stderr)
-            sys.exit(ExitCodes.WORKFLOW_NOT_VALID.value)
-        except jinja2.exceptions.UndefinedError as jerr:
-            logger.fatal(f"Impossible to parse the workflow. Templating variable missing, {jerr}")
-            print(f"Impossible to parse the workflow. Templating variable missing, {jerr}", file=sys.stderr)
-            sys.exit(ExitCodes.WORKFLOW_NOT_VALID.value)
+            response = requests.get(f"{BACKEND_URL}/workflow")
+            response.raise_for_status()
+            status_data = response.json()
 
-    else:
-        print("Unsupported workflow format file %s" % cmd_args.workflow, file=sys.stderr)
-        sys.exit(ExitCodes.WORKFLOW_FILE_TYPE_NOT_SUPPORTED.value)
-
-    # run the workflow
-    if cmd_args.filter_nodes != "":
-        filtered_nodes = cmd_args.filter_nodes.split(",")
-        aw.set_filtered_nodes(filtered_nodes)
-    if cmd_args.skip_nodes != "":
-        skipped_nodes = cmd_args.skip_nodes.split(",")
-        aw.set_skipped_nodes(skipped_nodes)
-
-    start_from_node = cmd_args.start_from_node if cmd_args.start_from_node else '_s'
-    end_to_node = cmd_args.end_to_node if cmd_args.end_to_node else '_e'
-
-    if cmd_args.mode == 'textual' and not cmd_args.verify_only:
-        output = TextualWorkflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
-        output.run(start_node=start_from_node, end_node=end_to_node, verify_only=cmd_args.verify_only)
-    else:
-        output_threads = []
-        if cmd_args.mode == 'stdout' or cmd_args.verify_only:
-            stdout_thread = StdoutWorkflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
-            stdout_thread.start()
-            output_threads.append(stdout_thread)
-
-        if cmd_args.draw_png:
-            png_thread = PngDrawflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
-            png_thread.start()
-            output_threads.append(png_thread)
-
-        def signal_handler(sig, frame):
+            # Simple stdout display logic
             console = Console()
-            y_or_n = console.input(' Do you want to quit the software?')
-            if not aw.is_stopping():
-                while y_or_n.lower() != 'y' and y_or_n.lower() != 'n' :
-                    y_or_n = console.input(' Do you want to quit the software? [y/n]')
-                if y_or_n == 'y':
-                    console.print(" Workflow stopping, please wait that running playbooks end.")
-                    aw.stop()
+            console.clear()
+            console.print(f"Workflow Status: {status_data['status']}")
+            console.print("-" * 20)
+            if "nodes" in status_data:
+                for node_id, node_info in status_data["nodes"].items():
+                    console.print(f"Node: {node_id:<20} Status: {node_info['status']:<15} Type: {node_info['type']}")
 
+            if status_data["status"] in ["ended", "failed"]:
+                print(f"Workflow finished with status: {status_data['status']}")
+                break
 
-        signal.signal(signal.SIGINT, signal_handler)
+            time.sleep(2)
 
-        aw.run(start_node=start_from_node, end_node=end_to_node, verify_only=cmd_args.verify_only)
-
-        for output_thread in output_threads:
-            output_thread.join()
+        except requests.exceptions.RequestException as e:
+            print(f"Error polling workflow status: {e}", file=sys.stderr)
+            break
+        except KeyboardInterrupt:
+            # This is handled by the signal handler, but as a fallback
+            break
 
 
 if __name__ == "__main__":
