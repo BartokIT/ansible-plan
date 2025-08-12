@@ -407,26 +407,23 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
 
     def __init__(self, workflow, event, logging_dir, log_level, cmd_args):
         super().__init__(workflow, event, logging_dir, log_level, cmd_args)
+        # We are not using the base class run loop, so we don't need to set the run_wrapper
         self.get_workflow().add_event_listener(self)
         self.app = self.WorkflowApp(self)
-        self.set_run_wrapper(self.app.run)
 
-    def draw_init(self, *args, **kwargs):
-        # The Textual app is started via the run_wrapper, so we don't need to do anything here.
-        pass
-
-    def draw_end(self, *args, **kwargs):
-        pass
-
-    def draw_step(self):
-        pass
-
-    def draw_pause(self):
-        # The Textual event loop will handle pausing, so we don't need to do anything here.
-        # We can sleep for a short time to avoid busy-waiting.
-        time.sleep(0.1)
+    def run(self, start_node, end_node, verify_only):
+        """
+        This method is called directly from __main__.py for textual mode.
+        It launches the Textual app. The app itself will then start the
+        workflow in a background thread.
+        """
+        self.app.start_node = start_node
+        self.app.end_node = end_node
+        self.app.verify_only = verify_only
+        self.app.run()
 
     def notify_event(self, event: WorkflowEvent):
+        # This is called from the workflow thread
         self._logger.debug("Event received: %s" % event)
         self.app.handle_workflow_event(event)
 
@@ -461,6 +458,15 @@ class TextualWorkflowOutput(WorkflowOutput, WorkflowListener):
             root_node.data = root_node_id
             self.tree_nodes[root_node_id] = root_node
             self._build_tree(workflow, root_node_id, root_node)
+            self.run_workflow()
+
+        @work(thread=True)
+        def run_workflow(self):
+            self.outer_instance.get_workflow().run(
+                start_node=self.start_node,
+                end_node=self.end_node,
+                verify_only=self.verify_only
+            )
 
         def _build_tree(self, workflow, node_id, tree_node):
             for child_id in workflow.get_original_graph().successors(node_id):
