@@ -29,7 +29,7 @@ from rich.console import Console
 from .exceptions import (AnsibleWorkflowLoadingError, AnsibleWorkflowValidationError, AnsibleWorkflowVaultScript,
                          ExitCodes, AnsibleWorkflowYAMLNotValid)
 from .loader import WorkflowYamlLoader
-from .output import CursesWorkflowOutput, StdoutWorkflowOutput, PngDrawflowOutput, TextualWorkflowOutput
+from .output import StdoutWorkflowOutput, PngDrawflowOutput, TextualWorkflowOutput
 from ansible.cli.arguments import option_helpers as opt_help
 from ansible.parsing.splitter import parse_kv
 
