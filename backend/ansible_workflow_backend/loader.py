@@ -402,6 +402,11 @@ class WorkflowYamlLoader(WorkflowLoader):
         options['vault_script'] = self.__yaml_parsed.get(YamlKeys.OPTIONS_KEY.value, {}).get('vault_script')
         options['global_path'] = self.__yaml_parsed.get(YamlKeys.OPTIONS_KEY.value, {}).get('global_path')
 
+        workflow_dir = os.path.dirname(os.path.abspath(self.__workflow_file))
+        if options.get('global_path') and not os.path.isabs(options['global_path']):
+            options['global_path'] = os.path.join(workflow_dir, options['global_path'])
+
+
         template_variables = {
             **self.input_templating,
             **self.__yaml_parsed.get(YamlKeys.TEMPLATING_KEY.value, {})
@@ -662,11 +667,11 @@ class WorkflowYamlLoader(WorkflowLoader):
             self.__workflow.get_original_graph().add_node(gnode_id)
             self.__workflow.get_original_graph().add_edge(block_id, gnode_id)
 
-            if 'block' not in inode:
+            if 'block' in inode:
+                zero_outdegree_nodes.extend(block_sub_nodes)
+            else: # This covers both playbook and dummy nodes
                 if strategy == 'parallel' or (strategy == 'serial' and inode == to_be_imported[-1]):
                     zero_outdegree_nodes.append(gnode)
-            else:
-                zero_outdegree_nodes.extend(block_sub_nodes)
 
             # if the strategy is serial
             if strategy == 'serial':

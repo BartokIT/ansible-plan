@@ -11,3 +11,8 @@ textual
 rich
 jinja2
 ansible
+fastapi
+uvicorn
+httpx
+python-multipart
+networkx
