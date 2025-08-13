@@ -355,7 +355,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 if self.graph.out_degree(child_id) > 0:
                     self._build_tree(child_id, child_tree_node)
 
-        @work(thread=True)
+        @work(thread=True, exclusive=True)
         def update_node_statuses(self):
             nodes = self.api_client.get_all_nodes()
             for node in nodes:
@@ -374,15 +374,13 @@ class TextualWorkflowOutput(WorkflowOutput):
                         if node_id in self.node_spinners:
                             self.node_spinners[node_id].cancel()
                             del self.node_spinners[node_id]
+
+                        if node.get('type') == 'block':
+                            label = f"[b]{node_id}[/b]"
                         else:
-                            # This node was not running, so no spinner to cancel.
-                            # We need to set its label here.
-                            if node.get('type') == 'block':
-                                label = f"[b]{node_id}[/b]"
-                            else:
-                                icon = self.status_icons.get(status, " ")
-                                label = f"{icon} {node_id}"
-                            tree_node.set_label(label)
+                            icon = self.status_icons.get(status, " ")
+                            label = f"{icon} {node_id}"
+                        tree_node.set_label(label)
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:
@@ -419,29 +417,15 @@ class TextualWorkflowOutput(WorkflowOutput):
         @work(thread=True)
         def update_spinner(self, tree_node, node_data):
             spinner_cycle = itertools.cycle(self.spinner_icons)
-            node_id = node_data['id']
-            try:
-                while True: # We will cancel this worker externally
-                    icon_char = next(spinner_cycle)
-                    icon = f"[yellow]{icon_char}[/yellow]"
-                    if node_data.get('type') == 'block':
-                        label = f"{icon} [b]{node_data['id']}[/b]"
-                    else:
-                        label = f"{icon} {node_data['id']}"
-                    tree_node.set_label(label)
-                    time.sleep(0.1)
-            finally:
-                # This block will run when the worker is cancelled.
-                # We need the FINAL status here.
-                final_node_data = self.node_data.get(node_id, {})
-                status = final_node_data.get('status')
-
-                if final_node_data.get('type') == 'block':
-                    label = f"[b]{node_id}[/b]"
+            while True: # We will cancel this worker externally
+                icon_char = next(spinner_cycle)
+                icon = f"[yellow]{icon_char}[/yellow]"
+                if node_data.get('type') == 'block':
+                    label = f"{icon} [b]{node_data['id']}[/b]"
                 else:
-                    icon = self.status_icons.get(status, " ")
-                    label = f"{icon} {node_id}"
+                    label = f"{icon} {node_data['id']}"
                 tree_node.set_label(label)
+                time.sleep(0.1)
 
         @work(exclusive=True, thread=True)
         def show_stdout(self, node_id: str):
