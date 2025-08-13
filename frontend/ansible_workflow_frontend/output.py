@@ -283,7 +283,6 @@ class TextualWorkflowOutput(WorkflowOutput):
             super().__init__()
             self.outer_instance = outer_instance
             self.api_client = outer_instance.api_client
-            # self.tree_nodes is potentially stale, no longer used for updates
             self.tree_nodes = {}
             self.node_data = {}
             self.graph = nx.DiGraph()
@@ -358,17 +357,16 @@ class TextualWorkflowOutput(WorkflowOutput):
 
         @work(thread=True, exclusive=True)
         def update_node_statuses(self):
-            nodes = self.api_client.get_all_nodes()
-            all_tree_nodes = self.query_one(Tree).nodes.values()
-            for node in nodes:
-                node_id = node['id']
+            nodes_from_api = self.api_client.get_all_nodes()
+            # Sanitize the data: last write wins for any duplicate node IDs
+            final_node_states = {node['id']: node for node in nodes_from_api}
 
-                # Find the live tree node instead of using the cached self.tree_nodes
-                tree_node = next((n for n in all_tree_nodes if n.data == node_id), None)
-
-                if tree_node:
+            for node_id, node in final_node_states.items():
+                if node_id in self.tree_nodes:
                     # Update internal data store
                     self.node_data[node_id] = node
+
+                    tree_node = self.tree_nodes[node_id]
                     status = node['status']
 
                     if status == NodeStatus.RUNNING.value:
