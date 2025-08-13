@@ -395,6 +395,8 @@ class TextualWorkflowOutput(WorkflowOutput):
 
             details_table = self.query_one("#node_details", DataTable)
             details_table.clear()
+            details_table.add_column("Property", width=20)
+            details_table.add_column("Value")
 
             def add_detail(key, value):
                 height = str(value).count('\n') + 1
