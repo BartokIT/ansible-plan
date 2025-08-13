@@ -373,7 +373,6 @@ class TextualWorkflowOutput(WorkflowOutput):
                     else:
                         if node_id in self.node_spinners:
                             self.node_spinners[node_id].cancel()
-                            del self.node_spinners[node_id]
                         else:
                             # This node was not running, so no spinner to cancel.
                             # We need to set its label here.
@@ -397,8 +396,9 @@ class TextualWorkflowOutput(WorkflowOutput):
 
             details_table = self.query_one("#node_details", DataTable)
             details_table.clear()
-            details_table.add_column("Property", width=20)
-            details_table.add_column("Value")
+            if not details_table.columns:
+                details_table.add_column("Property", width=20)
+                details_table.add_column("Value")
 
             def add_detail(key, value):
                 height = str(value).count('\n') + 1
@@ -442,6 +442,10 @@ class TextualWorkflowOutput(WorkflowOutput):
                     icon = self.status_icons.get(status, " ")
                     label = f"{icon} {node_id}"
                 tree_node.set_label(label)
+
+                # Remove self from the spinners dictionary
+                if node_id in self.node_spinners:
+                    del self.node_spinners[node_id]
 
         @work(exclusive=True, thread=True)
         def show_stdout(self, node_id: str):
