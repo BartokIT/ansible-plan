@@ -295,7 +295,9 @@ class TextualWorkflowOutput(WorkflowOutput):
                 NodeStatus.FAILED.value: "[red]✖[/red]",
                 NodeStatus.SKIPPED.value: "[cyan]»[/cyan]",
             }
-            self.node_spinners = {}
+            # This dictionary now only serves as a flag to indicate if a spinner worker
+            # has been started for a node, to prevent duplicates.
+            self.active_spinners = set()
             self.stdout_watcher = None
 
         def compose(self) -> ComposeResult:
@@ -310,7 +312,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
         def on_mount(self) -> None:
             self.initial_setup()
-            self.set_interval(2, self.update_node_statuses)
+            self.set_interval(0.5, self.update_node_statuses)
 
         @work(thread=True)
         def initial_setup(self):
@@ -357,33 +359,33 @@ class TextualWorkflowOutput(WorkflowOutput):
 
         @work(thread=True, exclusive=True)
         def update_node_statuses(self):
+            # Sanitize the data from the API to prevent processing duplicate statuses
             nodes_from_api = self.api_client.get_all_nodes()
-            # Sanitize the data: last write wins for any duplicate node IDs
             final_node_states = {node['id']: node for node in nodes_from_api}
 
             for node_id, node in final_node_states.items():
                 if node_id in self.tree_nodes:
-                    # Update internal data store
+                    # Update the central data store
                     self.node_data[node_id] = node
 
                     tree_node = self.tree_nodes[node_id]
                     status = node['status']
 
                     if status == NodeStatus.RUNNING.value:
-                        if node_id not in self.node_spinners:
-                            self.node_spinners[node_id] = self.update_spinner(tree_node, node)
+                        # If a spinner isn't already running for this node, start one.
+                        if node_id not in self.active_spinners:
+                            self.active_spinners.add(node_id)
+                            self.update_spinner(tree_node, node)
                     else:
-                        if node_id in self.node_spinners:
-                            self.node_spinners[node_id].cancel()
+                        # For any non-running state, we are the source of truth.
+                        # The spinner, if it exists, will see the state change and stop itself.
+                        # We just set the final label.
+                        if node.get('type') == 'block':
+                            label = f"[b]{node_id}[/b]"
                         else:
-                            # This node was not running, so no spinner to cancel.
-                            # We need to set its label here.
-                            if node.get('type') == 'block':
-                                label = f"[b]{node_id}[/b]"
-                            else:
-                                icon = self.status_icons.get(status, " ")
-                                label = f"{icon} {node_id}"
-                            tree_node.set_label(label)
+                            icon = self.status_icons.get(status, " ")
+                            label = f"{icon} {node_id}"
+                        tree_node.set_label(label)
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:
@@ -420,34 +422,35 @@ class TextualWorkflowOutput(WorkflowOutput):
 
         @work(thread=True)
         def update_spinner(self, tree_node, node_data):
+            """
+            This worker is now self-terminating. It spins as long as the node's
+            status is 'running' in the central self.node_data store.
+            """
             spinner_cycle = itertools.cycle(self.spinner_icons)
             node_id = node_data['id']
-            try:
-                while True: # We will cancel this worker externally
-                    icon_char = next(spinner_cycle)
-                    icon = f"[yellow]{icon_char}[/yellow]"
-                    if node_data.get('type') == 'block':
-                        label = f"{icon} [b]{node_data['id']}[/b]"
-                    else:
-                        label = f"{icon} {node_data['id']}"
-                    tree_node.set_label(label)
-                    time.sleep(0.1)
-            finally:
-                # This block will run when the worker is cancelled.
-                # We need the FINAL status here.
-                final_node_data = self.node_data.get(node_id, {})
-                status = final_node_data.get('status')
 
-                if final_node_data.get('type') == 'block':
-                    label = f"[b]{node_id}[/b]"
+            while self.node_data.get(node_id, {}).get('status') == NodeStatus.RUNNING.value:
+                icon_char = next(spinner_cycle)
+                icon = f"[yellow]{icon_char}[/yellow]"
+
+                # Use the original node_data for static info like type and id
+                if node_data.get('type') == 'block':
+                    label = f"{icon} [b]{node_id}[/b]"
                 else:
-                    icon = self.status_icons.get(status, " ")
                     label = f"{icon} {node_id}"
-                tree_node.set_label(label)
 
-                # Remove self from the spinners dictionary
-                if node_id in self.node_spinners:
-                    del self.node_spinners[node_id]
+                # Final check to prevent a race condition where the status changes
+                # between the while-check and this set_label call.
+                if self.node_data.get(node_id, {}).get('status') == NodeStatus.RUNNING.value:
+                    tree_node.set_label(label)
+
+                time.sleep(0.1)
+
+            # The loop has ended, meaning the node is no longer running.
+            # The main update_node_statuses loop is now responsible for setting the
+            # final label. This worker just needs to clean up its flag.
+            if node_id in self.active_spinners:
+                self.active_spinners.remove(node_id)
 
         @work(exclusive=True, thread=True)
         def show_stdout(self, node_id: str):
