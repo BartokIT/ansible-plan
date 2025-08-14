@@ -1,10 +1,9 @@
 ---
 options:
-  global_path: examples/
   vault_script: vault_script_test.py
 defaults:
   inventory: inventory.ini
-- workflow:
+workflow:
   - id: 1
     block:
       - id: 1.1

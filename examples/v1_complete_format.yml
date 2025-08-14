@@ -4,7 +4,6 @@ meta:
 templating:
   var_number_one: content_fist_var
 options:
-  global_path: examples/
   vault_script: vault_script_test.py
 defaults:
   inventory: inventory.ini

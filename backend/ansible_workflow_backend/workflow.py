@@ -12,6 +12,7 @@ import ansible_runner
 import abc
 import os
 import os.path
+import logging
 from .exceptions import AnsibleWorkflowDuplicateNodeId, ExitCodes
 
 

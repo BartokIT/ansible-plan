@@ -1,6 +1,5 @@
 ---
 options:
-  global_path: examples/
   vault_script: vault_script_test.py
 templating:
   first_var: "first_hostname {{ external_template_1 }}"
