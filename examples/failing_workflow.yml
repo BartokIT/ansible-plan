@@ -1,6 +1,5 @@
 ---
 options:
-  global_path: examples/
   vault_script: vault_script_test.py
 defaults:
   inventory: inventory.ini
@@ -19,7 +18,7 @@ workflow:
         import_playbook: playbooks/failing_play.yml
         description: |
           This task aims to shutdown all oracle servers. the servers are c2prddbm1*.
-          Adding more lines 
+          Adding more lines
           - test
           - test
           bla bla bla.
@@ -38,7 +37,7 @@ workflow:
             import_playbook: playbooks/failing_play.yml
             description: |
               This task aims to shutdown all oracle servers. the servers are c2prddbm1*.
-              Adding more lines 
+              Adding more lines
               - test
               - test
               bla bla bla.

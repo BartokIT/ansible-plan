@@ -1,0 +1,207 @@
+import os
+print(f"Backend CWD: {os.getcwd()}")
+import signal
+import sys
+import threading
+from datetime import datetime
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, List
+
+from backend.ansible_workflow_backend.loader import WorkflowYamlLoader
+from backend.ansible_workflow_backend.workflow import AnsibleWorkflow, NodeStatus, WorkflowStatus, PNode
+from backend.ansible_workflow_backend.exceptions import (
+    AnsibleWorkflowLoadingError,
+    AnsibleWorkflowValidationError,
+    AnsibleWorkflowVaultScript,
+    AnsibleWorkflowYAMLNotValid,
+)
+import jinja2
+
+app = FastAPI()
+
+# Global state
+workflow_lock = threading.Lock()
+current_workflow: Optional[AnsibleWorkflow] = None
+
+class WorkflowStartRequest(BaseModel):
+    workflow_file: str
+    extra_vars: Dict = Field(default_factory=dict)
+    input_templating: Dict = Field(default_factory=dict)
+    check_mode: bool = False
+    verbosity: int = 0
+    start_from_node: Optional[str] = None
+    end_to_node: Optional[str] = None
+    skip_nodes: List[str] = Field(default_factory=list)
+    filter_nodes: List[str] = Field(default_factory=list)
+    log_dir: str = "logs"
+    log_dir_no_info: bool = False
+    log_level: str = "info"
+
+
+@app.post("/workflow")
+async def start_workflow(request: WorkflowStartRequest, background_tasks: BackgroundTasks):
+    global current_workflow
+    with workflow_lock:
+        if current_workflow and current_workflow.get_running_status() == WorkflowStatus.RUNNING:
+            raise HTTPException(status_code=409, detail="A workflow is already running.")
+
+        logging_dir = "%s" % request.log_dir
+        if not request.log_dir_no_info:
+            logging_dir += "/%s_%s" % (os.path.basename(request.workflow_file), datetime.now().strftime("%Y%m%d_%H%M%S"))
+
+        try:
+            loader = WorkflowYamlLoader(
+                request.workflow_file,
+                logging_dir,
+                request.log_level,
+                request.input_templating,
+                request.check_mode,
+                request.verbosity,
+            )
+            aw = loader.parse(request.extra_vars)
+            current_workflow = aw
+        except (
+            AnsibleWorkflowVaultScript,
+            AnsibleWorkflowValidationError,
+            AnsibleWorkflowYAMLNotValid,
+            AnsibleWorkflowLoadingError,
+            jinja2.exceptions.UndefinedError,
+        ) as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
+        if request.filter_nodes:
+            aw.set_filtered_nodes(request.filter_nodes)
+        if request.skip_nodes:
+            aw.set_skipped_nodes(request.skip_nodes)
+
+        start_node = request.start_from_node if request.start_from_node else '_s'
+        end_node = request.end_to_node if request.end_to_node else '_e'
+
+        background_tasks.add_task(aw.run, start_node=start_node, end_node=end_node, verify_only=False)
+
+    return {"message": "Workflow started."}
+
+
+@app.get("/workflow")
+def get_workflow_status():
+    with workflow_lock:
+        if not current_workflow:
+            return {"status": "not_started"}
+        status = current_workflow.get_running_status()
+        return {"status": status.value if hasattr(status, 'value') else status}
+
+
+@app.get("/workflow/nodes")
+def get_workflow_nodes():
+    with workflow_lock:
+        if not current_workflow:
+            return []
+
+        nodes_data = []
+        for node_id in current_workflow.get_nodes():
+            node_obj = current_workflow.get_node_object(node_id)
+            status = node_obj.get_status()
+            node_info = {
+                "id": node_obj.get_id(),
+                "status": status.value if hasattr(status, 'value') else status,
+                "type": node_obj.get_type(),
+            }
+            if isinstance(node_obj, PNode):
+                node_info.update({
+                    "playbook": node_obj.get_playbook(),
+                    "description": node_obj.get_description(),
+                    "reference": node_obj.get_reference(),
+                })
+            nodes_data.append(node_info)
+        return nodes_data
+
+@app.get("/workflow/graph")
+def get_workflow_graph():
+    with workflow_lock:
+        if not current_workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found.")
+        return {"edges": current_workflow.get_original_graph_edges()}
+
+@app.get("/workflow/node/{node_id}/stdout")
+def get_node_stdout(node_id: str):
+    with workflow_lock:
+        if not current_workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found.")
+
+        logging_dir = current_workflow.get_logging_dir()
+        node_obj = current_workflow.get_node_object(node_id)
+        if not isinstance(node_obj, PNode):
+            raise HTTPException(status_code=404, detail="Node is not a playbook node.")
+
+        ident = getattr(node_obj, 'ident', node_id)
+        stdout_path = os.path.join(logging_dir, ident, "stdout")
+
+        if not os.path.exists(stdout_path):
+            return {"stdout": ""}
+
+        with open(stdout_path, "r") as f:
+            return {"stdout": f.read()}
+
+
+@app.post("/workflow/stop")
+def stop_workflow():
+    with workflow_lock:
+        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.RUNNING:
+            raise HTTPException(status_code=404, detail="No running workflow to stop.")
+        current_workflow.stop()
+    return {"message": "Workflow stopping."}
+
+
+@app.post("/workflow/node/{node_id}/restart")
+def restart_node(node_id: str):
+    with workflow_lock:
+        if not current_workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found.")
+
+        node_obj = current_workflow.get_node_object(node_id)
+        if not isinstance(node_obj, PNode):
+            raise HTTPException(status_code=404, detail="Node is not a playbook node.")
+
+        # This is a simplified restart logic.
+        current_workflow.add_running_node(node_id)
+        current_workflow.run_node(node_id)
+
+    return {"message": f"Node {node_id} restarting."}
+
+
+@app.post("/workflow/node/{node_id}/skip")
+def skip_node(node_id: str):
+    with workflow_lock:
+        if not current_workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found.")
+
+        node_obj = current_workflow.get_node_object(node_id)
+        node_obj.set_skipped()
+        # We also need to add it to the running nodes so the workflow progresses
+        current_workflow.add_running_node(node_id)
+
+    return {"message": f"Node {node_id} skipped."}
+
+
+@app.post("/shutdown")
+def shutdown():
+    with workflow_lock:
+        if current_workflow and current_workflow.get_running_status() == WorkflowStatus.RUNNING:
+            raise HTTPException(status_code=409, detail="Cannot shutdown while a workflow is running.")
+
+        # This is a simple way to shutdown for this app.
+        # In a real production app, a more graceful shutdown mechanism would be needed.
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    return {"message": "Shutting down."}
+
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="info")

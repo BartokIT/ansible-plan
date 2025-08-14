@@ -18,21 +18,23 @@
 # along with this program; if not, see <https://www.gnu.org/licenses/agpl.html/>.
 
 import logging
+import logging.handlers
 import sys
 import argparse
 import os.path
 from datetime import datetime
 import threading
-import jinja2
 import signal
 from rich.console import Console
-from .exceptions import (AnsibleWorkflowLoadingError, AnsibleWorkflowValidationError, AnsibleWorkflowVaultScript,
-                         ExitCodes, AnsibleWorkflowYAMLNotValid)
-from .loader import WorkflowYamlLoader
-from .output import StdoutWorkflowOutput, PngDrawflowOutput, TextualWorkflowOutput
+import httpx
+import subprocess
+import time
+
+from .output import StdoutWorkflowOutput, TextualWorkflowOutput
 from ansible.cli.arguments import option_helpers as opt_help
 from ansible.parsing.splitter import parse_kv
 
+BACKEND_URL = "http://127.0.0.1:8001"
 
 def define_logger(logging_dir, level):
     logger_file_path = os.path.join(logging_dir, 'main.log')
@@ -51,6 +53,33 @@ def define_logger(logging_dir, level):
     logger_handler.setFormatter(logging.Formatter('%(asctime)s [%(levelname)s] %(name)s: %(message)s'))
     logger.addHandler(logger_handler)
     return logger
+
+
+def check_and_start_backend(logger):
+    try:
+        httpx.get(f"{BACKEND_URL}/health")
+        logger.info("Backend is already running.")
+    except httpx.ConnectError:
+        logger.info("Backend not running. Starting it now.")
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        with open("backend_stdout.log", "wb") as out, open("backend_stderr.log", "wb") as err:
+            process = subprocess.Popen(
+                [sys.executable, "-m", "uvicorn", "backend.main:app", "--port", "8001"],
+                cwd=project_root,
+                stdout=out,
+                stderr=err,
+            )
+
+        for _ in range(10):
+            try:
+                httpx.get(f"{BACKEND_URL}/health")
+                logger.info("Backend started successfully.")
+                return process
+            except httpx.ConnectError:
+                time.sleep(1)
+        logger.error("Failed to start the backend.")
+        sys.exit(1)
+    return None
 
 
 def read_options():
@@ -103,8 +132,8 @@ def read_options():
     parser.add_argument('-size', '--draw-size', dest='draw_size', default=10, type=int,
                         help='Choose the size of the draw graph')
 
-    parser.add_argument('--log-dir', dest='log_dir', default='/var/log/ansible/workflows',
-                        help='set the parent output logging directory. defaults to /var/log/ansible/workflows/[workflow name]-[execution time]')
+    parser.add_argument('--log-dir', dest='log_dir', default='logs',
+                        help='set the parent output logging directory. defaults to logs/[workflow name]-[execution time]')
 
     parser.add_argument('--log-dir-no-info', dest='log_dir_no_info', action='store_true',
                         help='Does not add the workflow name and the execution time to the log dir name')
@@ -125,89 +154,92 @@ def keyvalue(value):
 
 def main():
     cmd_args = read_options()
-    extra_vars = {}
-    for single_extra_vars in cmd_args.extra_vars:
-        extra_vars.update(parse_kv(single_extra_vars))
-    input_templating = {x: y for [x, y] in cmd_args.input_templating}
 
-    # calculate the logging directory
     logging_dir = "%s" % cmd_args.log_dir
     if not cmd_args.log_dir_no_info:
         logging_dir += "/%s_%s" % (os.path.basename(cmd_args.workflow), datetime.now().strftime("%Y%m%d_%H%M%S"))
 
     logger = define_logger(logging_dir, cmd_args.log_level)
-    aw = None
-    if cmd_args.workflow.endswith('.yml'):
-        try:
-            wl = WorkflowYamlLoader(cmd_args.workflow, logging_dir, cmd_args.log_level, input_templating, cmd_args.check_mode, cmd_args.verbosity)
-            aw = wl.parse(extra_vars)
-        except AnsibleWorkflowVaultScript as vserr:
-            print("Vault script error.\n%s" % vserr, file=sys.stderr)
-            sys.exit(ExitCodes.VAULT_SCRIPT_ABSENT.value)
-        except AnsibleWorkflowValidationError as valerr:
-            logger.fatal("Impossible to parse the workflow. See loader log for details")
-            print("Wrong workflow format.\n%s" % str(valerr), file=sys.stderr)
-            sys.exit(ExitCodes.VALIDATION_ERROR.value)
-        except AnsibleWorkflowYAMLNotValid as yerr:
-            logger.fatal("Impossible to parse the workflow. See loader log for details")
-            print("Wrong YAML format.\n%s" % str(yerr), file=sys.stderr)
-            sys.exit(ExitCodes.YAML_NOT_VALID.value)
-        except AnsibleWorkflowLoadingError as lerr:
-            logger.fatal("Impossible to parse the workflow. See loader log for details")
-            print("Wrong YAML format.\n%s" % str(lerr), file=sys.stderr)
-            sys.exit(ExitCodes.WORKFLOW_NOT_VALID.value)
-        except jinja2.exceptions.UndefinedError as jerr:
-            logger.fatal(f"Impossible to parse the workflow. Templating variable missing, {jerr}")
-            print(f"Impossible to parse the workflow. Templating variable missing, {jerr}", file=sys.stderr)
-            sys.exit(ExitCodes.WORKFLOW_NOT_VALID.value)
 
-    else:
-        print("Unsupported workflow format file %s" % cmd_args.workflow, file=sys.stderr)
-        sys.exit(ExitCodes.WORKFLOW_FILE_TYPE_NOT_SUPPORTED.value)
+    backend_process = check_and_start_backend(logger)
 
-    # run the workflow
-    if cmd_args.filter_nodes != "":
-        filtered_nodes = cmd_args.filter_nodes.split(",")
-        aw.set_filtered_nodes(filtered_nodes)
-    if cmd_args.skip_nodes != "":
-        skipped_nodes = cmd_args.skip_nodes.split(",")
-        aw.set_skipped_nodes(skipped_nodes)
+    extra_vars = {}
+    for single_extra_vars in cmd_args.extra_vars:
+        extra_vars.update(parse_kv(single_extra_vars))
 
-    start_from_node = cmd_args.start_from_node if cmd_args.start_from_node else '_s'
-    end_to_node = cmd_args.end_to_node if cmd_args.end_to_node else '_e'
+    input_templating = {x: y for [x, y] in cmd_args.input_templating}
+
+    start_payload = {
+        "workflow_file": os.path.abspath(cmd_args.workflow),
+        "extra_vars": extra_vars,
+        "input_templating": input_templating,
+        "check_mode": cmd_args.check_mode,
+        "verbosity": cmd_args.verbosity,
+        "start_from_node": cmd_args.start_from_node,
+        "end_to_node": cmd_args.end_to_node,
+        "skip_nodes": cmd_args.skip_nodes.split(",") if cmd_args.skip_nodes else [],
+        "filter_nodes": cmd_args.filter_nodes.split(",") if cmd_args.filter_nodes else [],
+        "log_dir": cmd_args.log_dir,
+        "log_dir_no_info": cmd_args.log_dir_no_info,
+        "log_level": cmd_args.log_level,
+    }
+
+    try:
+        response = httpx.post(f"{BACKEND_URL}/workflow", json=start_payload, timeout=30)
+        response.raise_for_status()
+    except (httpx.ConnectError, httpx.HTTPStatusError) as e:
+        logger.error(f"Failed to start workflow: {e}")
+        print(f"Failed to start workflow: {e}", file=sys.stderr)
+        if hasattr(e, 'response') and e.response:
+            print(e.response.text, file=sys.stderr)
+        sys.exit(1)
+
 
     if cmd_args.mode == 'textual' and not cmd_args.verify_only:
-        output = TextualWorkflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
-        output.run(start_node=start_from_node, end_node=end_to_node, verify_only=cmd_args.verify_only)
+        output = TextualWorkflowOutput(
+            backend_url=BACKEND_URL,
+            event=threading.Event(),
+            logging_dir=logging_dir,
+            log_level=cmd_args.log_level,
+            cmd_args=cmd_args
+        )
+        output.run()
     else:
-        output_threads = []
-        if cmd_args.mode == 'stdout' or cmd_args.verify_only:
-            stdout_thread = StdoutWorkflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
-            stdout_thread.start()
-            output_threads.append(stdout_thread)
+        stdout_thread = StdoutWorkflowOutput(
+            backend_url=BACKEND_URL,
+            event=threading.Event(),
+            logging_dir=logging_dir,
+            log_level=cmd_args.log_level,
+            cmd_args=cmd_args
+        )
+        stdout_thread.start()
 
-        if cmd_args.draw_png:
-            png_thread = PngDrawflowOutput(workflow=aw, event=threading.Event(), logging_dir=logging_dir, log_level=cmd_args.log_level, cmd_args=cmd_args)
-            png_thread.start()
-            output_threads.append(png_thread)
+        console = Console()
 
         def signal_handler(sig, frame):
-            console = Console()
-            y_or_n = console.input(' Do you want to quit the software?')
-            if not aw.is_stopping():
-                while y_or_n.lower() != 'y' and y_or_n.lower() != 'n' :
-                    y_or_n = console.input(' Do you want to quit the software? [y/n]')
-                if y_or_n == 'y':
-                    console.print(" Workflow stopping, please wait that running playbooks end.")
-                    aw.stop()
-
+            y_or_n = console.input(' Do you want to quit the software? [y/n]')
+            if y_or_n.lower() == 'y':
+                try:
+                    httpx.post(f"{BACKEND_URL}/workflow/stop")
+                    console.print(" Workflow stopping command sent.")
+                except httpx.ConnectError:
+                    console.print("Could not connect to backend to stop workflow.")
 
         signal.signal(signal.SIGINT, signal_handler)
 
-        aw.run(start_node=start_from_node, end_node=end_to_node, verify_only=cmd_args.verify_only)
+        stdout_thread.join()
 
-        for output_thread in output_threads:
-            output_thread.join()
+    # Shutdown logic
+    try:
+        response = httpx.get(f"{BACKEND_URL}/workflow")
+        response.raise_for_status()
+        status = response.json().get("status")
+        if status != "running" and backend_process:
+            logger.info("Workflow finished. Shutting down backend.")
+            httpx.post(f"{BACKEND_URL}/shutdown")
+            backend_process.terminate()
+    except (httpx.ConnectError, httpx.HTTPStatusError) as e:
+        logger.warning(f"Could not get workflow status or shutdown backend: {e}")
 
 
 if __name__ == "__main__":

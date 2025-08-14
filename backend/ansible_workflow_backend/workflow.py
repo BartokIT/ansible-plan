@@ -2,6 +2,9 @@ from enum import Enum
 import sys
 import typing
 import warnings
+import threading
+from datetime import datetime
+import time
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message="networkx backend defined more than once: nx-loopback")
     import networkx as nx
@@ -9,10 +12,7 @@ import ansible_runner
 import abc
 import os
 import os.path
-import time
 import logging
-import logging.handlers
-from datetime import datetime
 from .exceptions import AnsibleWorkflowDuplicateNodeId, ExitCodes
 
 
@@ -326,6 +326,9 @@ class AnsibleWorkflow():
     def get_original_graph(self) -> nx.DiGraph:
         return self.__original_graph
 
+    def get_original_graph_edges(self) -> typing.List[typing.List[str]]:
+        return [[u, v] for u, v in self.__original_graph.edges()]
+
     def add_link(self, node_id: str, next_node_id: str):
         self.__graph.add_edge(node_id, next_node_id)
 
@@ -439,7 +442,7 @@ class AnsibleWorkflow():
         return some_failed_tasks
 
     def __run_step(self, end_node="_e"):
-        for node_id in self.__running_nodes:
+        for node_id in list(self.__running_nodes):
             node = self.get_node_object(node_id)
             # if current node is ended search for next nodes
             if node.get_status() in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
@@ -522,7 +525,7 @@ class AnsibleWorkflow():
             error = "Workflow is not valid.\nSee the logs at %s" % self.__logging_dir
             self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, error)
             # print(error)
-            sys.exit(ExitCodes.PLAYBOOK_WRONG_PARAMETER.value)
+            return
 
         if verify_only:
             self.__running_status = WorkflowStatus.ENDED
@@ -539,7 +542,7 @@ class AnsibleWorkflow():
             # print(error)
             self.__running_status = WorkflowStatus.FAILED
             self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, error)
-            sys.exit(ExitCodes.START_NODE_NOT_EXISTS.value)
+            return
 
         self._set_skipped_nodes(start_node, end_node)
         start_node_object = self.get_node_object(start_node)
@@ -561,7 +564,6 @@ class AnsibleWorkflow():
             # print("something failed")
             self.__running_status = WorkflowStatus.FAILED
             self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, '')
-            sys.exit(ExitCodes.WORKFLOW_FAILED.value)
         else:
             # print("something not failed")
             self.__running_status = WorkflowStatus.ENDED
