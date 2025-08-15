@@ -160,6 +160,7 @@ def main():
         logging_dir += "/%s_%s" % (os.path.basename(cmd_args.workflow), datetime.now().strftime("%Y%m%d_%H%M%S"))
 
     logger = define_logger(logging_dir, cmd_args.log_level)
+    console = Console()
 
     backend_process = check_and_start_backend(logger)
 
@@ -187,11 +188,36 @@ def main():
     try:
         response = httpx.post(f"{BACKEND_URL}/workflow", json=start_payload, timeout=30)
         response.raise_for_status()
-    except (httpx.ConnectError, httpx.HTTPStatusError) as e:
+        response_data = response.json()
+        if response_data.get("status") == "reconnected":
+            console.print(f"Reconnected to running workflow: {cmd_args.workflow}")
+
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 409:
+            detail = e.response.json().get("detail", {})
+            message = detail.get("message", "An unknown conflict occurred.")
+            running_workflow_path = detail.get("running_workflow_file", "")
+
+            console.print(f"[bold red]Error:[/bold red] {message}")
+
+            if running_workflow_path:
+                y_or_n = console.input(f"Do you want to connect to the running workflow at '{running_workflow_path}'? [y/n] ")
+                if y_or_n.lower() == 'y':
+                    cmd_args.workflow = running_workflow_path
+                    console.print(f"Connecting to existing workflow: {cmd_args.workflow}")
+                else:
+                    sys.exit(0)
+            else:
+                sys.exit(1)
+        else:
+            logger.error(f"Failed to start workflow: {e}")
+            print(f"Failed to start workflow: {e}", file=sys.stderr)
+            if hasattr(e, 'response') and e.response:
+                print(e.response.text, file=sys.stderr)
+            sys.exit(1)
+    except httpx.ConnectError as e:
         logger.error(f"Failed to start workflow: {e}")
         print(f"Failed to start workflow: {e}", file=sys.stderr)
-        if hasattr(e, 'response') and e.response:
-            print(e.response.text, file=sys.stderr)
         sys.exit(1)
 
 
@@ -213,8 +239,6 @@ def main():
             cmd_args=cmd_args
         )
         stdout_thread.start()
-
-        console = Console()
 
         def signal_handler(sig, frame):
             y_or_n = console.input(' Do you want to quit the software? [y/n]')

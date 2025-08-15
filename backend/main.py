@@ -44,7 +44,13 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
     global current_workflow
     with workflow_lock:
         if current_workflow and current_workflow.get_running_status() == WorkflowStatus.RUNNING:
-            raise HTTPException(status_code=409, detail="A workflow is already running.")
+            if current_workflow.get_workflow_file() == request.workflow_file:
+                return {"status": "reconnected"}
+            else:
+                raise HTTPException(status_code=409, detail={
+                    "message": "A different workflow is already running",
+                    "running_workflow_file": current_workflow.get_workflow_file()
+                })
 
         logging_dir = "%s" % request.log_dir
         if not request.log_dir_no_info:

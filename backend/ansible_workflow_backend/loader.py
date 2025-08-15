@@ -245,7 +245,7 @@ class WorkflowYamlLoader(WorkflowLoader):
         '''
         self.__define_logger(logging_dir, logging_level)
         self.__workflow_file: string = workflow_file
-        self.__workflow: AnsibleWorkflow = AnsibleWorkflow(logging_dir, logging_level)
+        self.__workflow: AnsibleWorkflow = AnsibleWorkflow(self.__workflow_file, logging_dir, logging_level)
         self._default_format_version: int = 1
         self.__check_mode: bool = check_mode
         self.__verbosity = verbosity
