@@ -299,6 +299,7 @@ class TextualWorkflowOutput(WorkflowOutput):
             # has been started for a node, to prevent duplicates.
             self.active_spinners = set()
             self.stdout_watcher = None
+            self._shutdown_event = threading.Event()
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -313,6 +314,11 @@ class TextualWorkflowOutput(WorkflowOutput):
         def on_mount(self) -> None:
             self.initial_setup()
             self.set_interval(0.5, self.update_node_statuses)
+
+        def action_quit(self) -> None:
+            """Called when the user quits the application."""
+            self._shutdown_event.set()
+            self.exit()
 
         @work(thread=True)
         def initial_setup(self):
@@ -429,7 +435,7 @@ class TextualWorkflowOutput(WorkflowOutput):
             spinner_cycle = itertools.cycle(self.spinner_icons)
             node_id = node_data['id']
 
-            while self.node_data.get(node_id, {}).get('status') == NodeStatus.RUNNING.value:
+            while self.node_data.get(node_id, {}).get('status') == NodeStatus.RUNNING.value and not self._shutdown_event.is_set():
                 icon_char = next(spinner_cycle)
                 icon = f"[yellow]{icon_char}[/yellow]"
 
@@ -469,7 +475,7 @@ class TextualWorkflowOutput(WorkflowOutput):
             stdout_log.clear()
 
             last_content = ""
-            while True: # Will be cancelled
+            while not self._shutdown_event.is_set():
                 current_stdout = self.api_client.get_node_stdout(node_id)
                 if current_stdout != last_content:
                     new_content = current_stdout[len(last_content):]
