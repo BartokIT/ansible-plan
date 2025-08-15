@@ -1,0 +1,1 @@
+Collega questa PR all'issue #8 come richiesto.
