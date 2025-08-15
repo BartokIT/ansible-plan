@@ -1,0 +1,21 @@
+---
+- id: 1
+  block:
+    - id: 1.1
+      import_playbook: examples/playbooks/first.yml
+    - id: 1.2
+      import_playbook: examples/playbooks/second.yml
+
+- id: 3
+  block:
+    - id: 3.1
+      import_playbook: examples/playbooks/third.yml
+    - id: 3.2
+      import_playbook: examples/playbooks/fourth.yml
+
+- id: 4
+  block:
+    - id: 4.1
+      import_playbook: examples/playbooks/fifth.yml
+    - id: 4.2
+      import_playbook: examples/playbooks/fourth.yml

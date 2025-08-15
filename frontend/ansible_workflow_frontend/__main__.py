@@ -162,7 +162,7 @@ def main():
     logger = define_logger(logging_dir, cmd_args.log_level)
     console = Console()
 
-    backend_process = check_and_start_backend(logger)
+    check_and_start_backend(logger)
 
     extra_vars = {}
     for single_extra_vars in cmd_args.extra_vars:
@@ -230,6 +230,7 @@ def main():
             cmd_args=cmd_args
         )
         output.run()
+        print("Workflow finished. Shutting down backend.")
     else:
         stdout_thread = StdoutWorkflowOutput(
             backend_url=BACKEND_URL,
@@ -250,7 +251,6 @@ def main():
                     console.print("Could not connect to backend to stop workflow.")
 
         signal.signal(signal.SIGINT, signal_handler)
-
         stdout_thread.join()
 
     # Shutdown logic
@@ -258,10 +258,9 @@ def main():
         response = httpx.get(f"{BACKEND_URL}/workflow")
         response.raise_for_status()
         status = response.json().get("status")
-        if status != "running" and backend_process:
+        if status != "running":
             logger.info("Workflow finished. Shutting down backend.")
             httpx.post(f"{BACKEND_URL}/shutdown")
-            backend_process.terminate()
     except (httpx.ConnectError, httpx.HTTPStatusError) as e:
         logger.warning(f"Could not get workflow status or shutdown backend: {e}")
 

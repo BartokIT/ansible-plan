@@ -86,16 +86,15 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
 
         background_tasks.add_task(aw.run, start_node=start_node, end_node=end_node, verify_only=False)
 
-    return {"message": "Workflow started."}
+    return {"status": WorkflowStatus.RUNNING}
 
 
 @app.get("/workflow")
 def get_workflow_status():
     with workflow_lock:
         if not current_workflow:
-            return {"status": "not_started"}
-        status = current_workflow.get_running_status()
-        return {"status": status.value if hasattr(status, 'value') else status}
+            return {"status": WorkflowStatus.NOT_STARTED}
+        return {"status": current_workflow.get_running_status()}
 
 
 @app.get("/workflow/nodes")

@@ -1,0 +1,30 @@
+---
+- name: fifth playbook
+  hosts: all
+  gather_facts: no
+  tasks:
+    - name: fourth task fourth playbook
+      debug:
+        msg: fourth task fourth playbook
+
+    - name: Pause 3 seconds
+      pause:
+        seconds: 5
+
+    - name: Generate a random string with 1 lower, 1 upper, 1 number and 1 special char (at least)
+      ansible.builtin.debug:
+        var: lookup('community.general.random_string', min_lower=1, min_upper=1, min_special=1, min_numeric=1)
+
+    - name: Find /var/log files equal or greater than 10 megabytes ending with .old or .log.gz
+      ansible.builtin.find:
+        paths: /var/log
+        patterns: '*.old,*.log.gz'
+      register: _found
+
+    - name: Found files
+      ansible.builtin.debug:
+        msg: "{{ _found }}"
+
+    - name: End task fifth playbook
+      debug:
+        msg: End task fifth playbook
