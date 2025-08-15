@@ -62,7 +62,7 @@ def check_and_start_backend(logger):
     except httpx.ConnectError:
         logger.info("Backend not running. Starting it now.")
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-        with open("backend_stdout.log", "wb") as out, open("backend_stderr.log", "wb") as err:
+        with open(os.path.join(project_root, "backend_stdout.log"), "wb") as out, open(os.path.join(project_root, "backend_stderr.log"), "wb") as err:
             process = subprocess.Popen(
                 [sys.executable, "-m", "uvicorn", "backend.main:app", "--port", "8001"],
                 cwd=project_root,
