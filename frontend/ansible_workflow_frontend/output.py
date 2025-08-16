@@ -290,11 +290,6 @@ class TextualWorkflowOutput(WorkflowOutput):
         #action_buttons Button {
             width: 1fr;
         }
-        .first-column {
-            background: darkslateblue;
-            color: white;
-            text-style: bold;
-        }
         """
 
         def __init__(self, outer_instance):
@@ -446,7 +441,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 details_table.add_column("Value")
 
             def add_detail(key, value):
-                details_table.add_row(Static(key, classes="first-column"), value, height=None)
+                details_table.add_row(Text(key.ljust(20), style="bold white on darkslateblue"), value, height=None)
 
             add_detail("ID", node_data.get('id'))
             if node_data.get('type') == 'playbook':
