@@ -405,6 +405,14 @@ class TextualWorkflowOutput(WorkflowOutput):
                             label = f"{icon} {node_id}"
                         tree_node.set_label(label)
 
+                    # If the updated node is the one currently selected, refresh the action buttons
+                    if node_id == self.selected_node_id:
+                        action_buttons = self.query_one("#action_buttons")
+                        if status == NodeStatus.FAILED.value:
+                            action_buttons.display = True
+                        else:
+                            action_buttons.display = False
+
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:
                 self.stdout_watcher.cancel()
