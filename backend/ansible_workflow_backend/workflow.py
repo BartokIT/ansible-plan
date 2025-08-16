@@ -256,7 +256,7 @@ class WorkflowListener(object):
 
 
 class AnsibleWorkflow():
-    def __init__(self, logging_dir, log_level, filtered_nodes=None):
+    def __init__(self, workflow_file, logging_dir, log_level, filtered_nodes=None):
         self.__graph: nx.DiGraph = nx.DiGraph()
         self.__original_graph: nx.DiGraph = nx.DiGraph()
         self.__running_status = WorkflowStatus.NOT_STARTED
@@ -267,6 +267,10 @@ class AnsibleWorkflow():
         self.__listeners: WorkflowListener = []
         self.__skipped_nodes: typing.List[str] = []
         self.__logging_dir = logging_dir
+        self.__workflow_file = workflow_file
+
+    def get_workflow_file(self):
+        return self.__workflow_file
 
     def get_logging_dir(self):
         return self.__logging_dir

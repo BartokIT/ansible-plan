@@ -43,8 +43,14 @@ class WorkflowStartRequest(BaseModel):
 async def start_workflow(request: WorkflowStartRequest, background_tasks: BackgroundTasks):
     global current_workflow
     with workflow_lock:
-        if current_workflow and current_workflow.get_running_status() == WorkflowStatus.RUNNING:
-            raise HTTPException(status_code=409, detail="A workflow is already running.")
+        if current_workflow and current_workflow.get_running_status() in [WorkflowStatus.RUNNING, WorkflowStatus.ENDED]:
+            if current_workflow.get_workflow_file() == request.workflow_file:
+                return {"status": "reconnected"}
+            else:
+                raise HTTPException(status_code=409, detail={
+                    "message": "A different workflow is already running",
+                    "running_workflow_file": current_workflow.get_workflow_file()
+                })
 
         logging_dir = "%s" % request.log_dir
         if not request.log_dir_no_info:
@@ -80,16 +86,15 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
 
         background_tasks.add_task(aw.run, start_node=start_node, end_node=end_node, verify_only=False)
 
-    return {"message": "Workflow started."}
+    return {"status": WorkflowStatus.RUNNING}
 
 
 @app.get("/workflow")
 def get_workflow_status():
     with workflow_lock:
         if not current_workflow:
-            return {"status": "not_started"}
-        status = current_workflow.get_running_status()
-        return {"status": status.value if hasattr(status, 'value') else status}
+            return {"status": WorkflowStatus.NOT_STARTED}
+        return {"status": current_workflow.get_running_status()}
 
 
 @app.get("/workflow/nodes")
