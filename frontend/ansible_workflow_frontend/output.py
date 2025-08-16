@@ -441,7 +441,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 details_table.add_column("Value")
 
             def add_detail(key, value):
-                details_table.add_row(key, value, height=None)
+                details_table.add_row(Text(key, style="bold"), value, height=None)
 
             add_detail("ID", node_data.get('id'))
             if node_data.get('type') == 'playbook':
