@@ -7,6 +7,7 @@ import time
 from typing import Callable
 from datetime import datetime
 from rich.console import Console
+from rich.highlighter import Highlighter
 from rich.table import Table
 from rich.text import Text
 import sys
@@ -244,6 +245,10 @@ class StdoutWorkflowOutput(WorkflowOutput):
             self.api_client.skip_node(node['id'])
 
 
+class NullHighlighter(Highlighter):
+    def highlight(self, text):
+        pass
+
 class TextualWorkflowOutput(WorkflowOutput):
     _log_name = 'textual.log'
 
@@ -320,7 +325,9 @@ class TextualWorkflowOutput(WorkflowOutput):
                         yield Button("Relaunch", id="relaunch_button", variant="success")
                         yield Button("Skip", id="skip_button", variant="error")
                     yield Rule()
-                    yield RichLog(id="playbook_stdout", markup=True, highlight=True)
+                    playbook_stdout_log = RichLog(id="playbook_stdout", markup=True, highlight=True)
+                    playbook_stdout_log.highlighter = NullHighlighter()
+                    yield playbook_stdout_log
             yield Footer()
 
         def on_mount(self) -> None:
