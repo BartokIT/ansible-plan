@@ -325,7 +325,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                         yield Button("Relaunch", id="relaunch_button", variant="success")
                         yield Button("Skip", id="skip_button", variant="error")
                     yield Rule()
-                    playbook_stdout_log = RichLog(id="playbook_stdout", markup=True, highlight=True)
+                    playbook_stdout_log = RichLog(id="playbook_stdout", markup=False, highlight=True)
                     playbook_stdout_log.highlighter = NullHighlighter()
                     yield playbook_stdout_log
             yield Footer()
@@ -513,29 +513,26 @@ class TextualWorkflowOutput(WorkflowOutput):
         def show_stdout(self, node_id: str):
             """Reads and displays the entire stdout for a given node."""
             stdout_log = self.query_one("#playbook_stdout", RichLog)
-            stdout_log.display = False
-            stdout_log.display = True
             stdout_log.clear()
-
             stdout = self.api_client.get_node_stdout(node_id)
-            stdout_log.write(stdout)
+            text = Text.from_ansi(stdout)
+            stdout_log.write(text)
 
         @work(exclusive=True, thread=True)
         def watch_stdout(self, node_id: str):
             stdout_log = self.query_one("#playbook_stdout", RichLog)
-            stdout_log.clear()
+            last_content = self.api_client.get_node_stdout(node_id)
 
-            last_content = ""
             while not self._shutdown_event.is_set():
+                time.sleep(0.5)
                 current_stdout = self.api_client.get_node_stdout(node_id)
                 if current_stdout != last_content:
                     new_content = current_stdout[len(last_content):]
-                    stdout_log.write(new_content)
+                    text = Text.from_ansi(new_content)
+                    stdout_log.write(text)
                     last_content = current_stdout
 
                 status_response = self.api_client.get_all_nodes()
                 node_status = next((n['status'] for n in status_response if n['id'] == node_id), None)
                 if node_status != NodeStatus.RUNNING.value:
                     break
-
-                time.sleep(0.5)
