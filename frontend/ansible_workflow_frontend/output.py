@@ -276,7 +276,6 @@ class TextualWorkflowOutput(WorkflowOutput):
         }
         #playbook_stdout {
             background: $surface;
-            padding: 0 1;
         }
         #action_buttons {
             display: none;
@@ -321,7 +320,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                         yield Button("Relaunch", id="relaunch_button", variant="success")
                         yield Button("Skip", id="skip_button", variant="error")
                     yield Rule()
-                    yield RichLog(id="playbook_stdout", markup=True)
+                    yield RichLog(id="playbook_stdout", markup=True, highlight=True)
             yield Footer()
 
         def on_mount(self) -> None:
