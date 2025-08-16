@@ -279,6 +279,9 @@ class TextualWorkflowOutput(WorkflowOutput):
             height: 100%;
             dock: left;
         }
+        #node_details {
+            background: lightgoldenrodyellow;
+        }
         #playbook_stdout {
             background: $surface;
         }
