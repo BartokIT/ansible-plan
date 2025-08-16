@@ -506,8 +506,6 @@ class TextualWorkflowOutput(WorkflowOutput):
         def show_stdout(self, node_id: str):
             """Reads and displays the entire stdout for a given node."""
             stdout_log = self.query_one("#playbook_stdout", RichLog)
-            stdout_log.display = False
-            stdout_log.display = True
             stdout_log.clear()
 
             stdout = self.api_client.get_node_stdout(node_id)
