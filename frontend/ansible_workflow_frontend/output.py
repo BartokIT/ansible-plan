@@ -276,6 +276,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         }
         #playbook_stdout {
             background: $surface;
+            padding: 0 1;
         }
         #action_buttons {
             display: none;
@@ -506,6 +507,8 @@ class TextualWorkflowOutput(WorkflowOutput):
         def show_stdout(self, node_id: str):
             """Reads and displays the entire stdout for a given node."""
             stdout_log = self.query_one("#playbook_stdout", RichLog)
+            stdout_log.display = False
+            stdout_log.display = True
             stdout_log.clear()
 
             stdout = self.api_client.get_node_stdout(node_id)
@@ -514,15 +517,10 @@ class TextualWorkflowOutput(WorkflowOutput):
         @work(exclusive=True, thread=True)
         def watch_stdout(self, node_id: str):
             stdout_log = self.query_one("#playbook_stdout", RichLog)
+            stdout_log.clear()
 
-            # Get the initial content to avoid writing it twice, as show_stdout
-            # has already populated the log.
-            last_content = self.api_client.get_node_stdout(node_id)
-
+            last_content = ""
             while not self._shutdown_event.is_set():
-                # Wait a small amount of time before polling for new content.
-                time.sleep(0.5)
-
                 current_stdout = self.api_client.get_node_stdout(node_id)
                 if current_stdout != last_content:
                     new_content = current_stdout[len(last_content):]
@@ -533,3 +531,5 @@ class TextualWorkflowOutput(WorkflowOutput):
                 node_status = next((n['status'] for n in status_response if n['id'] == node_id), None)
                 if node_status != NodeStatus.RUNNING.value:
                     break
+
+                time.sleep(0.5)
