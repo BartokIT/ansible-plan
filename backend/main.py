@@ -118,6 +118,7 @@ def get_workflow_nodes():
                     "description": node_obj.get_description(),
                     "reference": node_obj.get_reference(),
                 })
+                node_info.update(node_obj.get_telemetry())
             nodes_data.append(node_info)
         return nodes_data
 

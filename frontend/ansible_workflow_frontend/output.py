@@ -448,6 +448,8 @@ class TextualWorkflowOutput(WorkflowOutput):
                 add_detail("Playbook", node_data.get('playbook', 'N/A'))
                 add_detail("Description", node_data.get('description', 'N/A'))
                 add_detail("Reference", node_data.get('reference', 'N/A'))
+                add_detail("Started", node_data.get('started', 'N/A'))
+                add_detail("Ended", node_data.get('ended', 'N/A'))
                 self.show_stdout(node_id)
                 if node_data['status'] == NodeStatus.RUNNING.value:
                     self.stdout_watcher = self.watch_stdout(node_id)
