@@ -11,7 +11,7 @@ from rich.table import Table
 from rich.text import Text
 import sys
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Tree, RichLog, Rule, DataTable
+from textual.widgets import Header, Footer, Static, Tree, RichLog, Rule, DataTable, Button
 from textual.containers import Container, Horizontal, Vertical
 from textual import work
 from textual.reactive import reactive
@@ -277,12 +277,21 @@ class TextualWorkflowOutput(WorkflowOutput):
         #playbook_stdout {
             background: $surface;
         }
+        #action_buttons {
+            display: none;
+            height: auto;
+            padding-top: 1;
+        }
+        #action_buttons Button {
+            width: 1fr;
+        }
         """
 
         def __init__(self, outer_instance):
             super().__init__()
             self.outer_instance = outer_instance
             self.api_client = outer_instance.api_client
+            self.selected_node_id = None
             self.tree_nodes = {}
             self.node_data = {}
             self.graph = nx.DiGraph()
@@ -307,6 +316,9 @@ class TextualWorkflowOutput(WorkflowOutput):
                 yield Tree("Workflow", id="workflow_tree", classes="sidebar")
                 with Vertical():
                     yield DataTable(id="node_details", show_cursor=False, show_header=False)
+                    with Horizontal(id="action_buttons"):
+                        yield Button("Relaunch", id="relaunch_button", variant="success")
+                        yield Button("Skip", id="skip_button", variant="error")
                     yield Rule()
                     yield RichLog(id="playbook_stdout", markup=True)
             yield Footer()
@@ -393,15 +405,26 @@ class TextualWorkflowOutput(WorkflowOutput):
                             label = f"{icon} {node_id}"
                         tree_node.set_label(label)
 
+                    # If the updated node is the one currently selected, refresh the action buttons
+                    if node_id == self.selected_node_id:
+                        action_buttons = self.query_one("#action_buttons")
+                        if status == NodeStatus.FAILED.value:
+                            action_buttons.display = True
+                        else:
+                            action_buttons.display = False
+
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:
                 self.stdout_watcher.cancel()
                 self.stdout_watcher = None
 
             node_id = event.node.data
+            self.selected_node_id = node_id
             node_data = self.node_data.get(node_id)
+            action_buttons = self.query_one("#action_buttons")
 
             if not node_data:
+                action_buttons.display = False
                 return
 
             details_table = self.query_one("#node_details", DataTable)
@@ -424,6 +447,27 @@ class TextualWorkflowOutput(WorkflowOutput):
                     self.stdout_watcher = self.watch_stdout(node_id)
             elif node_data.get('type') == 'block':
                  add_detail("Type", "Block")
+
+            if node_data.get('status') == NodeStatus.FAILED.value:
+                action_buttons.display = True
+            else:
+                action_buttons.display = False
+
+        def on_button_pressed(self, event: Button.Pressed) -> None:
+            """Called when a button is pressed."""
+            if self.selected_node_id:
+                if event.button.id == "relaunch_button":
+                    self.api_client.restart_node(self.selected_node_id)
+                    # Clear the log and start watching for new output
+                    self.query_one("#playbook_stdout", RichLog).clear()
+                    if self.stdout_watcher:
+                        self.stdout_watcher.cancel()
+                    self.stdout_watcher = self.watch_stdout(self.selected_node_id)
+                elif event.button.id == "skip_button":
+                    self.api_client.skip_node(self.selected_node_id)
+
+            # Hide buttons after action
+            self.query_one("#action_buttons").display = False
 
 
         @work(thread=True)
