@@ -450,6 +450,11 @@ class TextualWorkflowOutput(WorkflowOutput):
             if self.selected_node_id:
                 if event.button.id == "relaunch_button":
                     self.api_client.restart_node(self.selected_node_id)
+                    # Clear the log and start watching for new output
+                    self.query_one("#playbook_stdout", RichLog).clear()
+                    if self.stdout_watcher:
+                        self.stdout_watcher.cancel()
+                    self.stdout_watcher = self.watch_stdout(self.selected_node_id)
                 elif event.button.id == "skip_button":
                     self.api_client.skip_node(self.selected_node_id)
 
