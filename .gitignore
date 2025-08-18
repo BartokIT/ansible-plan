@@ -9,3 +9,6 @@ ChangeLog
 __pycache__
 .vscode
 logs/
+backend_stderr.log
+backend_stdout.log
+examples/args
