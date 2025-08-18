@@ -256,7 +256,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         # We don't call super().__init__ because Textual has its own way of running.
         self._define_logger(logging_dir, log_level)
         self.api_client = ApiClient(backend_url)
-        self.app = self.WorkflowApp(self)
+        self.app = self.WorkflowApp(self, cmd_args)
 
     def run(self):
         """
@@ -275,9 +275,10 @@ class TextualWorkflowOutput(WorkflowOutput):
     class WorkflowApp(App):
         CSS_PATH = "style.css"
 
-        def __init__(self, outer_instance):
+        def __init__(self, outer_instance, cmd_args):
             super().__init__()
             self.outer_instance = outer_instance
+            self.cmd_args = cmd_args
             self.theme = "gruvbox"
             self.api_client = outer_instance.api_client
             self.selected_node_id = None
@@ -304,12 +305,12 @@ class TextualWorkflowOutput(WorkflowOutput):
             with Horizontal():
                 yield Tree("Workflow", id="workflow_tree", classes="sidebar")
                 with Vertical():
-                    yield DataTable(id="node_details", show_cursor=False, show_header=False)
+                    yield DataTable(id="node_details")
                     with Horizontal(id="action_buttons"):
                         yield Button("Relaunch", id="relaunch_button", variant="success")
                         yield Button("Skip", id="skip_button", variant="error")
                     yield Rule()
-                    playbook_stdout_log = RichLog(id="playbook_stdout", markup=False, highlight=True)
+                    playbook_stdout_log = RichLog(id="playbook_stdout", markup=False, highlight=True, wrap=False)
                     playbook_stdout_log.highlighter = NullHighlighter()
                     yield playbook_stdout_log
             yield Footer()
@@ -339,7 +340,8 @@ class TextualWorkflowOutput(WorkflowOutput):
             root_node_id = "_root"
             root_node = tree.root
             root_node.data = root_node_id
-            root_node.set_label("Workflow")
+            workflow_name = os.path.splitext(os.path.basename(self.cmd_args.workflow))[0]
+            root_node.set_label(workflow_name)
             self.tree_nodes[root_node_id] = root_node
 
             self._build_tree(root_node_id, root_node)
@@ -420,11 +422,13 @@ class TextualWorkflowOutput(WorkflowOutput):
 
             details_table = self.query_one("#node_details", DataTable)
             details_table.clear()
-            if not details_table.columns:
-                details_table.add_column("Property", width=20)
-                details_table.add_column("Value")
+            details_table.columns.clear()
+            details_table.add_column("Property", width=20)
+            details_table.add_column("Value", width=100)
 
             def add_detail(key, value):
+                if isinstance(value, str):
+                    value = value.replace(r'\n', '\n')
                 details_table.add_row(key, value, height=None)
 
             add_detail("ID", node_data.get('id'))
