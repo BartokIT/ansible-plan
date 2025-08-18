@@ -1,0 +1,46 @@
+Screen {
+    background: $background;
+    color: $text;
+}
+
+#workflow_tree {
+    background: $surface;
+    border-right: solid $primary;
+}
+
+#node_details {
+    background: $surface;
+}
+
+#playbook_stdout {
+    background: $surface-darken-1;
+}
+
+#action_buttons {
+    display: none;
+    height: auto;
+    padding-top: 1;
+}
+
+#action_buttons Button {
+    width: 1fr;
+}
+
+Button {
+    background: $primary;
+    color: $text-primary;
+}
+
+Button:hover {
+    background: $primary-lighten-1;
+}
+
+Header {
+    background: $primary;
+    color: $text-primary;
+}
+
+Footer {
+    background: $primary;
+    color: $text-primary;
+}
