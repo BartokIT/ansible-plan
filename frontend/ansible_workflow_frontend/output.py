@@ -441,14 +441,16 @@ class TextualWorkflowOutput(WorkflowOutput):
                 details_table.add_column("Value")
 
             def add_detail(key, value):
-                height = str(value).count('\n') + 1
-                details_table.add_row(key, value, height=height)
+                padded_key = f" {key} "
+                details_table.add_row(Text(padded_key.ljust(20), style="bold white on dark_blue"), value, height=None)
 
             add_detail("ID", node_data.get('id'))
             if node_data.get('type') == 'playbook':
                 add_detail("Playbook", node_data.get('playbook', 'N/A'))
                 add_detail("Description", node_data.get('description', 'N/A'))
                 add_detail("Reference", node_data.get('reference', 'N/A'))
+                add_detail("Started", node_data.get('started', 'N/A'))
+                add_detail("Ended", node_data.get('ended', 'N/A'))
                 self.show_stdout(node_id)
                 if node_data['status'] == NodeStatus.RUNNING.value:
                     self.stdout_watcher = self.watch_stdout(node_id)
