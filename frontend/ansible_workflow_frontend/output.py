@@ -2,6 +2,7 @@ from enum import Enum
 import threading
 import os
 import logging
+import logging.handlers
 import abc
 import time
 from typing import Callable
@@ -256,6 +257,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         # We don't call super().__init__ because Textual has its own way of running.
         self._define_logger(logging_dir, log_level)
         self.api_client = ApiClient(backend_url)
+        self.cmd_args = cmd_args
         self.app = self.WorkflowApp(self)
 
     def run(self):
@@ -327,6 +329,8 @@ class TextualWorkflowOutput(WorkflowOutput):
             # Fetch graph and node data once
             edges = self.api_client.get_workflow_graph()
             self.graph.add_edges_from(edges)
+            if "_root" not in self.graph:
+                self.graph.add_node("_root")
 
             nodes = self.api_client.get_all_nodes()
             for node in nodes:
@@ -338,7 +342,8 @@ class TextualWorkflowOutput(WorkflowOutput):
             root_node_id = "_root"
             root_node = tree.root
             root_node.data = root_node_id
-            root_node.set_label("Workflow")
+            workflow_filename = os.path.basename(self.outer_instance.cmd_args.workflow)
+            root_node.set_label(workflow_filename)
             self.tree_nodes[root_node_id] = root_node
 
             self._build_tree(root_node_id, root_node)
