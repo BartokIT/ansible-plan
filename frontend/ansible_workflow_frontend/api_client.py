@@ -44,3 +44,11 @@ class ApiClient:
     def skip_node(self, node_id: str):
         response = self.client.post(f"/workflow/node/{node_id}/skip")
         response.raise_for_status()
+
+    def check_health(self) -> bool:
+        try:
+            response = self.client.get("/health")
+            response.raise_for_status()
+            return True
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            return False

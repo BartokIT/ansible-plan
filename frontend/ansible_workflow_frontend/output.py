@@ -279,7 +279,7 @@ class TextualWorkflowOutput(WorkflowOutput):
     class WorkflowApp(App):
         CSS_PATH = "style.css"
 
-        status_message = reactive("Connecting to backend...")
+        status_message = reactive("")
 
         def __init__(self, outer_instance, cmd_args):
             super().__init__()
@@ -318,7 +318,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                     playbook_stdout_log = RichLog(id="playbook_stdout", markup=False, highlight=True)
                     playbook_stdout_log.highlighter = NullHighlighter()
                     yield playbook_stdout_log
-            yield Static("Connecting to backend...", id="status_bar")
+            yield Static("", id="status_bar")
             yield Footer()
 
         def watch_status_message(self, message: str) -> None:
@@ -328,8 +328,15 @@ class TextualWorkflowOutput(WorkflowOutput):
             except NoMatches:
                 pass
 
+        def update_health_status(self) -> None:
+            if self.api_client.check_health():
+                self.status_message = "Backend: Connected"
+            else:
+                self.status_message = "Backend: Disconnected"
+
         def on_mount(self) -> None:
             self.initial_setup()
+            self.set_interval(5, self.update_health_status)
             self.set_interval(0.5, self.update_node_statuses)
 
         def action_quit(self) -> None:
@@ -344,8 +351,6 @@ class TextualWorkflowOutput(WorkflowOutput):
             self.graph.add_edges_from(edges)
             if "_root" not in self.graph:
                 self.graph.add_node("_root")
-
-            self.status_message = "Backend connected."
 
             nodes = self.api_client.get_all_nodes()
             for node in nodes:
@@ -397,16 +402,11 @@ class TextualWorkflowOutput(WorkflowOutput):
                     status = node['status']
 
                     if status == NodeStatus.RUNNING.value:
-                        self.status_message = f"Node {node_id} is running."
                         # If a spinner isn't already running for this node, start one.
                         if node_id not in self.active_spinners:
                             self.active_spinners.add(node_id)
                             self.update_spinner(tree_node, node)
                     else:
-                        if status == NodeStatus.ENDED.value:
-                            self.status_message = f"Node {node_id} has ended."
-                        elif status == NodeStatus.FAILED.value:
-                            self.status_message = f"Node {node_id} has failed."
                         # For any non-running state, we are the source of truth.
                         # The spinner, if it exists, will see the state change and stop itself.
                         # We just set the final label.
