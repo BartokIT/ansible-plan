@@ -9,14 +9,16 @@ Screen {
     height: 100%;
     background: $surface;
     border-right: solid $primary;
+    hatch: right $foreground 10%;
     padding: 1;
 }
 
 #node_details {
     height: 30%;
     background: $surface;
-    padding: 1;
-    border-bottom: solid $primary;
+    hatch: right $foreground 10%;
+    padding: 0;
+    /*border-bottom: solid $primary;*/
 }
 
 #playbook_stdout {
@@ -27,26 +29,22 @@ Screen {
 
 #action_buttons {
     display: none;
-    height: auto;
-    padding-top: 1;
+    padding: 0;
     width: 100%;
     align-horizontal: right;
 }
 
 #action_buttons Button {
     width: auto;
-    margin-left: 1;
+    height: auto;
+    margin-left: 2;
 }
 
 Button {
-    background: $primary;
-    color: $text-primary;
+    /* background: $primary;
+    color: $text-primary; */
     border: none;
-    min-width: 10;
-}
-
-Button:hover {
-    background: $primary-lighten-1;
+    min-width: 15;
 }
 
 Header {
