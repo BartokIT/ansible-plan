@@ -375,7 +375,7 @@ class TextualWorkflowOutput(WorkflowOutput):
             final_node_states = {node['id']: node for node in nodes_from_api}
 
             for node_id, node in final_node_states.items():
-                if node_id in self.tree_nodes:
+                if node_id in self.tree_nodes and node_id != "_root":
                     # Update the central data store
                     self.node_data[node_id] = node
 
