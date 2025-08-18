@@ -21,6 +21,7 @@ import logging
 import logging.handlers
 import sys
 import argparse
+import os
 import os.path
 from datetime import datetime
 import threading
@@ -153,6 +154,7 @@ def keyvalue(value):
     return value.split('=')
 
 def main():
+    os.environ['TERM'] = 'xterm-256color'
     cmd_args = read_options()
 
     logging_dir = "%s" % cmd_args.log_dir
