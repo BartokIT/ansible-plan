@@ -67,9 +67,5 @@ DataTable {
 }
 
 RichLog {
-    padding: 1;
-}
-
-Rule {
-    color: $primary;
+    padding: 0;
 }

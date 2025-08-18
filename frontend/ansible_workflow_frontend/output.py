@@ -308,7 +308,6 @@ class TextualWorkflowOutput(WorkflowOutput):
                     with Horizontal(id="action_buttons"):
                         yield Button("Relaunch", id="relaunch_button", variant="success")
                         yield Button("Skip", id="skip_button", variant="error")
-                    yield Rule()
                     playbook_stdout_log = RichLog(id="playbook_stdout", markup=False, highlight=True)
                     playbook_stdout_log.highlighter = NullHighlighter()
                     yield playbook_stdout_log
