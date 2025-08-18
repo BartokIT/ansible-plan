@@ -1,34 +1,48 @@
 Screen {
     background: $background;
     color: $text;
+    layout: vertical;
 }
 
 #workflow_tree {
+    width: 30;
+    height: 100%;
     background: $surface;
     border-right: solid $primary;
+    padding: 1;
 }
 
 #node_details {
+    height: 30%;
     background: $surface;
+    padding: 1;
+    border-bottom: solid $primary;
 }
 
 #playbook_stdout {
     background: $surface-darken-1;
+    height: 70%;
+    padding: 1;
 }
 
 #action_buttons {
     display: none;
     height: auto;
     padding-top: 1;
+    width: 100%;
+    align-horizontal: right;
 }
 
 #action_buttons Button {
-    width: 1fr;
+    width: auto;
+    margin-left: 1;
 }
 
 Button {
     background: $primary;
     color: $text-primary;
+    border: none;
+    min-width: 10;
 }
 
 Button:hover {
@@ -36,11 +50,28 @@ Button:hover {
 }
 
 Header {
-    background: $primary;
+    background: $primary-darken-1;
     color: $text-primary;
+    text-style: bold;
 }
 
 Footer {
-    background: $primary;
+    background: $primary-darken-1;
     color: $text-primary;
+}
+
+Tree {
+    padding: 1;
+}
+
+DataTable {
+    padding: 1;
+}
+
+RichLog {
+    padding: 1;
+}
+
+Rule {
+    color: $primary;
 }

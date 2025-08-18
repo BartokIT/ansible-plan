@@ -20,7 +20,6 @@ import itertools
 import networkx as nx
 
 from .api_client import ApiClient
-from .themes import gruvbox_dark, gruvbox_light
 
 # These enums are needed for status comparison.
 # Ideally, they would be shared between frontend and backend.
@@ -279,7 +278,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         def __init__(self, outer_instance):
             super().__init__()
             self.outer_instance = outer_instance
-            self.dark = True
+            self.theme = "gruvbox"
             self.api_client = outer_instance.api_client
             self.selected_node_id = None
             self.tree_nodes = {}
@@ -316,9 +315,6 @@ class TextualWorkflowOutput(WorkflowOutput):
             yield Footer()
 
         def on_mount(self) -> None:
-            self.register_theme(gruvbox_dark)
-            self.register_theme(gruvbox_light)
-            self.theme = "gruvbox_dark" if self.dark else "gruvbox_light"
             self.initial_setup()
             self.set_interval(0.5, self.update_node_statuses)
 
