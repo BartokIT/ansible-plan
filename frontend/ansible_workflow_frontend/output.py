@@ -258,7 +258,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         self._define_logger(logging_dir, log_level)
         self.api_client = ApiClient(backend_url)
         self.cmd_args = cmd_args
-        self.app = self.WorkflowApp(self)
+        self.app = self.WorkflowApp(self, cmd_args)
 
     def run(self):
         """
@@ -277,9 +277,10 @@ class TextualWorkflowOutput(WorkflowOutput):
     class WorkflowApp(App):
         CSS_PATH = "style.css"
 
-        def __init__(self, outer_instance):
+        def __init__(self, outer_instance, cmd_args):
             super().__init__()
             self.outer_instance = outer_instance
+            self.workflow_filename = os.path.basename(cmd_args.workflow)
             self.theme = "gruvbox"
             self.api_client = outer_instance.api_client
             self.selected_node_id = None
@@ -304,7 +305,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         def compose(self) -> ComposeResult:
             yield Header()
             with Horizontal():
-                yield Tree("Workflow", id="workflow_tree", classes="sidebar")
+                yield Tree(self.workflow_filename, id="workflow_tree", classes="sidebar")
                 with Vertical():
                     yield DataTable(id="node_details", show_cursor=False, show_header=False)
                     with Horizontal(id="action_buttons"):
@@ -338,12 +339,9 @@ class TextualWorkflowOutput(WorkflowOutput):
 
             # Build the tree
             tree = self.query_one(Tree)
-            tree.clear()
             root_node_id = "_root"
             root_node = tree.root
             root_node.data = root_node_id
-            workflow_filename = os.path.basename(self.outer_instance.cmd_args.workflow)
-            root_node.set_label(workflow_filename)
             self.tree_nodes[root_node_id] = root_node
 
             self._build_tree(root_node_id, root_node)
