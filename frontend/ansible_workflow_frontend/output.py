@@ -273,28 +273,15 @@ class TextualWorkflowOutput(WorkflowOutput):
 
 
     class WorkflowApp(App):
-        CSS = """
-        .sidebar {
-            width: 40;
-            height: 100%;
-            dock: left;
-        }
-        #playbook_stdout {
-            background: $surface;
-        }
-        #action_buttons {
-            display: none;
-            height: auto;
-            padding-top: 1;
-        }
-        #action_buttons Button {
-            width: 1fr;
-        }
-        """
 
         def __init__(self, outer_instance):
             super().__init__()
             self.outer_instance = outer_instance
+            self.dark = True
+            if self.dark:
+                self.CSS_PATH = "themes/dark.css"
+            else:
+                self.CSS_PATH = "themes/light.css"
             self.api_client = outer_instance.api_client
             self.selected_node_id = None
             self.tree_nodes = {}
