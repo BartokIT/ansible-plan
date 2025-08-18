@@ -318,8 +318,8 @@ class TextualWorkflowOutput(WorkflowOutput):
                     playbook_stdout_log = RichLog(id="playbook_stdout", markup=False, highlight=True)
                     playbook_stdout_log.highlighter = NullHighlighter()
                     yield playbook_stdout_log
-            with Footer():
-                yield Static("Connecting to backend...", id="status_bar")
+            yield Static("Connecting to backend...", id="status_bar")
+            yield Footer()
 
         def watch_status_message(self, message: str) -> None:
             try:
