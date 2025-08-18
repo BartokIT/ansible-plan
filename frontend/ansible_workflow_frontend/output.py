@@ -2,6 +2,7 @@ from enum import Enum
 import threading
 import os
 import logging
+import logging.handlers
 import abc
 import time
 from typing import Callable
@@ -14,8 +15,10 @@ import sys
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Tree, RichLog, Rule, DataTable, Button
 from textual.containers import Container, Horizontal, Vertical
+from textual.message import Message
 from textual import work
 from textual.reactive import reactive
+from textual.css.query import NoMatches
 import itertools
 import networkx as nx
 
@@ -256,7 +259,8 @@ class TextualWorkflowOutput(WorkflowOutput):
         # We don't call super().__init__ because Textual has its own way of running.
         self._define_logger(logging_dir, log_level)
         self.api_client = ApiClient(backend_url)
-        self.app = self.WorkflowApp(self)
+        self.cmd_args = cmd_args
+        self.app = self.WorkflowApp(self, cmd_args)
 
     def run(self):
         """
@@ -275,9 +279,12 @@ class TextualWorkflowOutput(WorkflowOutput):
     class WorkflowApp(App):
         CSS_PATH = "style.css"
 
-        def __init__(self, outer_instance):
+        status_message = reactive("")
+
+        def __init__(self, outer_instance, cmd_args):
             super().__init__()
             self.outer_instance = outer_instance
+            self.workflow_filename = os.path.basename(cmd_args.workflow)
             self.theme = "gruvbox"
             self.api_client = outer_instance.api_client
             self.selected_node_id = None
@@ -302,7 +309,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         def compose(self) -> ComposeResult:
             yield Header()
             with Horizontal():
-                yield Tree("Workflow", id="workflow_tree", classes="sidebar")
+                yield Tree(self.workflow_filename, id="workflow_tree", classes="sidebar")
                 with Vertical():
                     yield DataTable(id="node_details", show_cursor=False, show_header=False)
                     with Horizontal(id="action_buttons"):
@@ -311,10 +318,25 @@ class TextualWorkflowOutput(WorkflowOutput):
                     playbook_stdout_log = RichLog(id="playbook_stdout", markup=False, highlight=True)
                     playbook_stdout_log.highlighter = NullHighlighter()
                     yield playbook_stdout_log
+            yield Static("", id="status_bar")
             yield Footer()
+
+        def watch_status_message(self, message: str) -> None:
+            try:
+                status_bar = self.query_one("#status_bar", Static)
+                status_bar.update(message)
+            except NoMatches:
+                pass
+
+        def update_health_status(self) -> None:
+            if self.api_client.check_health():
+                self.status_message = "Backend: Connected"
+            else:
+                self.status_message = "Backend: Disconnected"
 
         def on_mount(self) -> None:
             self.initial_setup()
+            self.set_interval(5, self.update_health_status)
             self.set_interval(0.5, self.update_node_statuses)
 
         def action_quit(self) -> None:
@@ -327,6 +349,8 @@ class TextualWorkflowOutput(WorkflowOutput):
             # Fetch graph and node data once
             edges = self.api_client.get_workflow_graph()
             self.graph.add_edges_from(edges)
+            if "_root" not in self.graph:
+                self.graph.add_node("_root")
 
             nodes = self.api_client.get_all_nodes()
             for node in nodes:
@@ -334,11 +358,9 @@ class TextualWorkflowOutput(WorkflowOutput):
 
             # Build the tree
             tree = self.query_one(Tree)
-            tree.clear()
             root_node_id = "_root"
             root_node = tree.root
             root_node.data = root_node_id
-            root_node.set_label("Workflow")
             self.tree_nodes[root_node_id] = root_node
 
             self._build_tree(root_node_id, root_node)
@@ -372,7 +394,7 @@ class TextualWorkflowOutput(WorkflowOutput):
             final_node_states = {node['id']: node for node in nodes_from_api}
 
             for node_id, node in final_node_states.items():
-                if node_id in self.tree_nodes:
+                if node_id in self.tree_nodes and node_id != "_root":
                     # Update the central data store
                     self.node_data[node_id] = node
 
