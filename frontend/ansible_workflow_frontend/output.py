@@ -303,13 +303,13 @@ class TextualWorkflowOutput(WorkflowOutput):
         def compose(self) -> ComposeResult:
             yield Header()
             with Horizontal():
-                yield Tree("Workflow", id="workflow_tree", classes="sidebar")
+                workflow_name = os.path.splitext(os.path.basename(self.cmd_args.workflow))[0]
+                yield Tree(workflow_name, id="workflow_tree", classes="sidebar")
                 with Vertical():
                     yield DataTable(id="node_details")
                     with Horizontal(id="action_buttons"):
                         yield Button("Relaunch", id="relaunch_button", variant="success")
                         yield Button("Skip", id="skip_button", variant="error")
-                    yield Rule()
                     playbook_stdout_log = RichLog(id="playbook_stdout", markup=False, highlight=True, wrap=False)
                     playbook_stdout_log.highlighter = NullHighlighter()
                     yield playbook_stdout_log
@@ -340,8 +340,6 @@ class TextualWorkflowOutput(WorkflowOutput):
             root_node_id = "_root"
             root_node = tree.root
             root_node.data = root_node_id
-            workflow_name = os.path.splitext(os.path.basename(self.cmd_args.workflow))[0]
-            root_node.set_label(workflow_name)
             self.tree_nodes[root_node_id] = root_node
 
             self._build_tree(root_node_id, root_node)

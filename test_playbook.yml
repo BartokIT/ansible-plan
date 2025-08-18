@@ -1,0 +1,5 @@
+- hosts: localhost
+  tasks:
+    - name: Print long line
+      debug:
+        msg: "This is a very long line to test the horizontal scrollbar in the RichLog widget. This is a very long line to test the horizontal scrollbar in the RichLog widget. This is a very long line to test the horizontal scrollbar in the RichLog widget."

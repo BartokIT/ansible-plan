@@ -1,0 +1,6 @@
+defaults:
+  inventory: inventory.ini
+  limit: ""
+workflow:
+  - id: test_node
+    import_playbook: test_playbook.yml

@@ -382,6 +382,8 @@ class WorkflowYamlLoader(WorkflowLoader):
         '''
         # validate the workflow file accordingly with the format version
         try:
+            import json
+            print(json.dumps(self.__yaml_parsed, indent=2))
             jsonschema.validate(instance=self.__yaml_parsed, schema=self.YAML_SCHEMA_V1)
         except jsonschema.ValidationError as err:
             self._logger.fatal("Impossible to parse the workflow. Validation error: %s" % err)

@@ -1,0 +1,15 @@
+Backend CWD: /app
+INFO:     127.0.0.1:33278 - "GET /health HTTP/1.1" 200 OK
+{
+  "defaults": {
+    "inventory": "inventory.ini",
+    "limit": ""
+  },
+  "workflow": [
+    {
+      "id": "test_node",
+      "import_playbook": "test_playbook.yml"
+    }
+  ]
+}
+INFO:     127.0.0.1:33290 - "POST /workflow HTTP/1.1" 400 Bad Request
