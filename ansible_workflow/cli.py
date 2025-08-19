@@ -14,6 +14,7 @@ import time
 
 from .output.stdout import StdoutWorkflowOutput
 from .output.textual.app import TextualWorkflowOutput
+from .models import WorkflowStartRequest
 from ansible.cli.arguments import option_helpers as opt_help
 from ansible.parsing.splitter import parse_kv
 
@@ -156,24 +157,23 @@ def main():
 
     input_templating = {x: y for [x, y] in cmd_args.input_templating}
 
-    start_payload = {
-        "workflow_file": os.path.abspath(cmd_args.workflow),
-        "extra_vars": extra_vars,
-        "input_templating": input_templating,
-        "check_mode": cmd_args.check_mode,
-        "verbosity": cmd_args.verbosity,
-        "start_from_node": cmd_args.start_from_node,
-        "end_to_node": cmd_args.end_to_node,
-        "skip_nodes": cmd_args.skip_nodes.split(",") if cmd_args.skip_nodes else [],
-        "filter_nodes": cmd_args.filter_nodes.split(",") if cmd_args.filter_nodes else [],
-        "log_dir": cmd_args.log_dir,
-        "log_dir_no_info": cmd_args.log_dir_no_info,
-        "log_level": cmd_args.log_level,
-        "verify_only": cmd_args.verify_only,
-    }
-
     try:
-        response = httpx.post(f"{BACKEND_URL}/workflow", json=start_payload, timeout=30)
+        payload_model = WorkflowStartRequest(
+            workflow_file=os.path.abspath(cmd_args.workflow),
+            extra_vars=extra_vars,
+            input_templating=input_templating,
+            check_mode=cmd_args.check_mode,
+            verbosity=cmd_args.verbosity,
+            start_from_node=cmd_args.start_from_node,
+            end_to_node=cmd_args.end_to_node,
+            skip_nodes=cmd_args.skip_nodes.split(",") if cmd_args.skip_nodes else [],
+            filter_nodes=cmd_args.filter_nodes.split(",") if cmd_args.filter_nodes else [],
+            log_dir=cmd_args.log_dir,
+            log_dir_no_info=cmd_args.log_dir_no_info,
+            log_level=cmd_args.log_level,
+            verify_only=cmd_args.verify_only,
+        )
+        response = httpx.post(f"{BACKEND_URL}/workflow", json=payload_model.model_dump(mode="json"), timeout=30)
         response.raise_for_status()
         response_data = response.json()
         if response_data.get("status") == "reconnected":

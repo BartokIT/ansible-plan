@@ -15,3 +15,19 @@ class WorkflowStartRequest(BaseModel):
     log_dir_no_info: bool = False
     log_level: str = "info"
     verify_only: bool = False
+
+
+class BaseNodeInfo(BaseModel):
+    id: str
+    status: str
+    type: str
+
+class BlockNodeInfo(BaseNodeInfo):
+    pass
+
+class PlaybookNodeInfo(BaseNodeInfo):
+    playbook: str
+    description: str
+    reference: str
+    started: str
+    ended: str
