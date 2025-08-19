@@ -595,7 +595,7 @@ class AnsibleWorkflow():
                     self.__running_status = WorkflowStatus.FAILED
                     self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, 'Workflow failed, waiting for retry.')
                     self.__resume_event.clear()
-                    self.__resume_event.wait()
+                    self.__resume_event.wait(timeout=1)
                 else:
                     # No running nodes and no failed nodes, we are done
                     self.__running_status = WorkflowStatus.ENDED
