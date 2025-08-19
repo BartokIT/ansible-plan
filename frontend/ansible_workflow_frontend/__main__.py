@@ -224,7 +224,7 @@ def main():
         sys.exit(1)
 
 
-    if cmd_args.mode == 'textual' and not cmd_args.verify_only:
+    if cmd_args.mode == 'textual':
         output = TextualWorkflowOutput(
             backend_url=BACKEND_URL,
             event=threading.Event(),
