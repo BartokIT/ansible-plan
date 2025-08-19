@@ -185,6 +185,7 @@ def main():
         "log_dir": cmd_args.log_dir,
         "log_dir_no_info": cmd_args.log_dir_no_info,
         "log_level": cmd_args.log_level,
+        "verify_only": cmd_args.verify_only,
     }
 
     try:
