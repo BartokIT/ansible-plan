@@ -1,4 +1,5 @@
 from enum import Enum
+import warnings
 import threading
 import os
 import logging
@@ -20,7 +21,9 @@ from textual import work
 from textual.reactive import reactive
 from textual.css.query import NoMatches
 import itertools
-import networkx as nx
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", message="networkx backend defined more than once: nx-loopback")
+    import networkx as nx
 import httpx
 
 from .api_client import ApiClient
@@ -125,6 +128,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
 
     def draw_init(self):
         self._logger.debug("Initializing stdout output")
+        if self.is_verify_only():
+            self.__console.print("[bold yellow]Running in VERIFY ONLY mode[/]", justify="center")
         self.__console.print("[italic]Waiting for workflow to start...[/]", justify="center")
 
         nodes = self.api_client.get_all_nodes()
@@ -265,6 +270,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         self._define_logger(logging_dir, log_level)
         self.api_client = ApiClient(backend_url)
         self.cmd_args = cmd_args
+        self._WorkflowOutput__verify_only = cmd_args.verify_only
         self.app = self.WorkflowApp(self, cmd_args)
 
     def run(self):
@@ -290,6 +296,10 @@ class TextualWorkflowOutput(WorkflowOutput):
             super().__init__()
             self.outer_instance = outer_instance
             self.workflow_filename = os.path.basename(cmd_args.workflow)
+            if self.outer_instance.is_verify_only():
+                self.title = f"Workflow Viewer (Verify Only)"
+            else:
+                self.title = "Workflow Viewer"
             self.theme = "gruvbox"
             self.api_client = outer_instance.api_client
             self.selected_node_id = None
@@ -422,7 +432,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                         # The spinner, if it exists, will see the state change and stop itself.
                         # We just set the final label.
                         if node.get('type') == 'block':
-                            label = f"[b]{child_id}[/b]"
+                            label = f"[b]{node_id}[/b]"
                         else:
                             icon = self.status_icons.get(status, " ")
                             label = f"{icon} {node_id}"
@@ -533,7 +543,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                 # Use the original node_data for static info like type and id
                 if node_data.get('type') == 'block':
-                    label = f"{icon} [b]{child_id}[/b]"
+                    label = f"{icon} [b]{node_id}[/b]"
                 else:
                     label = f"{icon} {node_id}"
 
