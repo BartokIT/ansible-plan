@@ -27,22 +27,7 @@ with warnings.catch_warnings():
 import httpx
 
 from .api_client import ApiClient
-
-# These enums are needed for status comparison.
-# Ideally, they would be shared between frontend and backend.
-class WorkflowStatus(Enum):
-    NOT_STARTED = 'not_started'
-    RUNNING = 'running'
-    ENDED = 'ended'
-    FAILED = 'failed'
-
-class NodeStatus(Enum):
-    RUNNING = 'running'
-    PRE_RUNNING = 'pre_running'
-    ENDED = 'ended'
-    FAILED = 'failed'
-    SKIPPED = 'skipped'
-    NOT_STARTED = 'not_started'
+from .workflow import WorkflowStatus, NodeStatus
 
 
 class WorkflowOutput(threading.Thread):

@@ -1,22 +1,3 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-#
-# Copyright 2021 BartokIT
-# Ansible® is a registered trademark of Red Hat, Inc. in the United States and other countries.
-#
-#
-# This program is free software; you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License v3.0 as published by
-# the Free Software Foundation.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU Affero General Public License for more details.
-#
-# You should have received a copy of the  GNU Affero General Public License v3.0
-# along with this program; if not, see <https://www.gnu.org/licenses/agpl.html/>.
-
 import logging
 import logging.handlers
 import sys
@@ -62,10 +43,12 @@ def check_and_start_backend(logger):
         logger.info("Backend is already running.")
     except httpx.ConnectError:
         logger.info("Backend not running. Starting it now.")
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        # In the new structure, we can start the backend directly
+        # The new command will be `python -m uvicorn ansible_workflow.api:app --port 8001`
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         with open(os.path.join(project_root, "backend_stdout.log"), "wb") as out, open(os.path.join(project_root, "backend_stderr.log"), "wb") as err:
             process = subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "backend.main:app", "--port", "8001"],
+                [sys.executable, "-m", "uvicorn", "ansible_workflow.api:app", "--port", "8001"],
                 cwd=project_root,
                 stdout=out,
                 stderr=err,
@@ -266,7 +249,3 @@ def main():
             httpx.post(f"{BACKEND_URL}/shutdown")
     except (httpx.ConnectError, httpx.HTTPStatusError) as e:
         logger.warning(f"Could not get workflow status or shutdown backend: {e}")
-
-
-if __name__ == "__main__":
-    main()

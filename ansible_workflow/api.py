@@ -6,17 +6,17 @@ import threading
 import time
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, List
+from typing import Optional
 
-from backend.ansible_workflow_backend.loader import WorkflowYamlLoader
-from backend.ansible_workflow_backend.workflow import AnsibleWorkflow, NodeStatus, WorkflowStatus, PNode
-from backend.ansible_workflow_backend.exceptions import (
+from .loader import WorkflowYamlLoader
+from .workflow import AnsibleWorkflow, NodeStatus, WorkflowStatus, PNode
+from .exceptions import (
     AnsibleWorkflowLoadingError,
     AnsibleWorkflowValidationError,
     AnsibleWorkflowVaultScript,
     AnsibleWorkflowYAMLNotValid,
 )
+from .models import WorkflowStartRequest
 import jinja2
 
 app = FastAPI()
@@ -24,21 +24,6 @@ app = FastAPI()
 # Global state
 workflow_lock = threading.Lock()
 current_workflow: Optional[AnsibleWorkflow] = None
-
-class WorkflowStartRequest(BaseModel):
-    workflow_file: str
-    extra_vars: Dict = Field(default_factory=dict)
-    input_templating: Dict = Field(default_factory=dict)
-    check_mode: bool = False
-    verbosity: int = 0
-    start_from_node: Optional[str] = None
-    end_to_node: Optional[str] = None
-    skip_nodes: List[str] = Field(default_factory=list)
-    filter_nodes: List[str] = Field(default_factory=list)
-    log_dir: str = "logs"
-    log_dir_no_info: bool = False
-    log_level: str = "info"
-    verify_only: bool = False
 
 
 @app.post("/workflow")
