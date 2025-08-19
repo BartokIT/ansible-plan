@@ -179,6 +179,12 @@ class PNode(Node):
     def get_reference(self):
         return self.__reference
 
+    def reset_status(self):
+        self.__thread = None
+        self.__runner = None
+        self._started_time = None
+        self._ended_time = None
+
     def run(self):
         self.set_started_time(datetime.now())
         self.__inventory = os.path.abspath(self.__inventory)
@@ -268,6 +274,7 @@ class AnsibleWorkflow():
         self.__skipped_nodes: typing.List[str] = []
         self.__logging_dir = logging_dir
         self.__workflow_file = workflow_file
+        self.__resume_event = threading.Event()
 
     def get_workflow_file(self):
         return self.__workflow_file
@@ -473,12 +480,12 @@ class AnsibleWorkflow():
 
 
             elif node.get_status() == NodeStatus.FAILED:
-                # just remove a failed node
-                # print("Failed node %s" % node_id)
                 node.set_ended_time(datetime.now())
                 self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.FAILED, node)
                 self.__running_nodes.remove(node_id)
-                # put failed status for the whole workflow
+                self.__running_status = WorkflowStatus.FAILED
+                self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Node %s failed" % node_id)
+
 
             if isinstance(node, PNode) and node.get_status() in ['ended', 'failed', 'skipped']:
                 self._logger.info("Node: %s - %s - [ %s - %s]" % (node_id, node.get_status(),
@@ -558,17 +565,87 @@ class AnsibleWorkflow():
             self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.RUNNING, start_node_object)
             start_node_object.run()
 
+    def restart_failed_node(self, node_id: str):
+        node = self.get_node_object(node_id)
+        if not node or node.get_status() != NodeStatus.FAILED:
+            self._logger.warning(f"Node {node_id} cannot be restarted.")
+            return
+
+        self._logger.info(f"Restarting node {node_id}")
+        self.__running_status = WorkflowStatus.RUNNING
+        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, f"Restarting from node {node_id}")
+
+        # Reset node status
+        node.reset_status()
+
+        self.__running_nodes.append(node_id)
+        self.__resume_event.set()
+
+    def run(self, start_node: str = "_s", end_node: str = "_e", verify_only: bool = False):
+        '''
+        Run the workflows starting from a graph node until reaching the end node.
+        Args:
+            start_node (string): The identifier of the starting node for the graph
+            end_node (string): The identifier of the ending node for the graph
+            verify_only (bool): A flag that skip the workflow run and verify only the correctness
+
+        '''
+
+        # perform validation of the
+        if not self.is_valid():
+            self.__running_status = WorkflowStatus.FAILED
+            error = "Workflow is not valid.\nSee the logs at %s" % self.__logging_dir
+            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, error)
+            # print(error)
+            return
+
+        if verify_only:
+            self.__running_status = WorkflowStatus.ENDED
+            return
+
+        if self.__running_status != WorkflowStatus.NOT_STARTED:
+            raise Exception("Already running")
+
+        # check the starting node
+        self._logger.info("Start from node %s" % start_node)
+        if not self.is_node_present(start_node):
+            error = "Starting node not exist: %s" % start_node
+            self._logger.error("Starting node not exist: %s" % start_node)
+            # print(error)
+            self.__running_status = WorkflowStatus.FAILED
+            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, error)
+            return
+
+        self._set_skipped_nodes(start_node, end_node)
+        start_node_object = self.get_node_object(start_node)
+        self.__running_status = WorkflowStatus.RUNNING
+        self.__running_nodes.append(start_node)
+        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, start_node)
+
+        if isinstance(start_node_object, PNode):
+            self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.RUNNING, start_node_object)
+            start_node_object.run()
+
         # loop over nodes
-        while len(self.__running_nodes):
-            self.__run_step(end_node)
+        while self.__running_status == WorkflowStatus.RUNNING:
+            if len(self.__running_nodes) > 0:
+                self.__run_step(end_node)
+            else:
+                # If there are no more running nodes, the workflow is either ended or failed
+                if self.get_some_failed_task():
+                    self.__running_status = WorkflowStatus.FAILED
+                    self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, 'Workflow failed')
+                else:
+                    self.__running_status = WorkflowStatus.ENDED
+                    self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, end_node)
+
+            if self.__running_status == WorkflowStatus.FAILED:
+                self.__resume_event.wait()
+                self.__resume_event.clear()
+
             time.sleep(1)
 
-        # print("See the output log to directory %s" % self.__logging_dir)
-        if self.get_some_failed_task():
-            # print("something failed")
-            self.__running_status = WorkflowStatus.FAILED
-            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, '')
-        else:
-            # print("something not failed")
-            self.__running_status = WorkflowStatus.ENDED
-            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, end_node)
+        if self.__running_status == WorkflowStatus.ENDED:
+            self._logger.info("Workflow finished successfully.")
+        elif self.__running_status == WorkflowStatus.FAILED:
+             self._logger.info("Workflow failed.")

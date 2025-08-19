@@ -170,9 +170,7 @@ def restart_node(node_id: str):
         if not isinstance(node_obj, PNode):
             raise HTTPException(status_code=404, detail="Node is not a playbook node.")
 
-        # This is a simplified restart logic.
-        current_workflow.add_running_node(node_id)
-        current_workflow.run_node(node_id)
+        current_workflow.restart_failed_node(node_id)
 
     return {"message": f"Node {node_id} restarting."}
 
