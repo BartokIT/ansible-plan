@@ -179,6 +179,12 @@ class PNode(Node):
     def get_reference(self):
         return self.__reference
 
+    def reset_status(self):
+        self.__thread = None
+        self.__runner = None
+        self._started_time = None
+        self._ended_time = None
+
     def run(self):
         self.set_started_time(datetime.now())
         self.__inventory = os.path.abspath(self.__inventory)
@@ -268,6 +274,7 @@ class AnsibleWorkflow():
         self.__skipped_nodes: typing.List[str] = []
         self.__logging_dir = logging_dir
         self.__workflow_file = workflow_file
+        self.__resume_event = threading.Event()
 
     def get_workflow_file(self):
         return self.__workflow_file
@@ -478,7 +485,7 @@ class AnsibleWorkflow():
                 node.set_ended_time(datetime.now())
                 self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.FAILED, node)
                 self.__running_nodes.remove(node_id)
-                # put failed status for the whole workflow
+                # Do not set workflow status to FAILED here, to allow for retry.
 
             if isinstance(node, PNode) and node.get_status() in ['ended', 'failed', 'skipped']:
                 self._logger.info("Node: %s - %s - [ %s - %s]" % (node_id, node.get_status(),
@@ -513,6 +520,25 @@ class AnsibleWorkflow():
             for _, next in self.__graph.out_edges(actual_node.get_id()):
                 skipped_after_end.append(next)
 
+    def restart_failed_node(self, node_id: str):
+        node = self.get_node_object(node_id)
+        if not node or node.get_status() != NodeStatus.FAILED:
+            self._logger.warning(f"Node {node_id} cannot be restarted.")
+            return
+
+        self._logger.info(f"Restarting node {node_id}")
+
+        # Set status back to RUNNING
+        self.__running_status = WorkflowStatus.RUNNING
+        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, f"Workflow resuming from node {node_id}")
+
+        # Reset node status
+        node.reset_status()
+
+        self.run_node(node_id)
+        self.add_running_node(node_id)
+        self.__resume_event.set()
+
     def run(self, start_node: str = "_s", end_node: str = "_e", verify_only: bool = False):
         '''
         Run the workflows starting from a graph node until reaching the end node.
@@ -528,7 +554,6 @@ class AnsibleWorkflow():
             self.__running_status = WorkflowStatus.FAILED
             error = "Workflow is not valid.\nSee the logs at %s" % self.__logging_dir
             self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, error)
-            # print(error)
             return
 
         if verify_only:
@@ -536,6 +561,9 @@ class AnsibleWorkflow():
             return
 
         if self.__running_status != WorkflowStatus.NOT_STARTED:
+            # This allows to re-enter the loop on retry
+            if self.__running_status == WorkflowStatus.RUNNING:
+                return
             raise Exception("Already running")
 
         # check the starting node
@@ -543,7 +571,6 @@ class AnsibleWorkflow():
         if not self.is_node_present(start_node):
             error = "Starting node not exist: %s" % start_node
             self._logger.error("Starting node not exist: %s" % start_node)
-            # print(error)
             self.__running_status = WorkflowStatus.FAILED
             self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, error)
             return
@@ -551,24 +578,32 @@ class AnsibleWorkflow():
         self._set_skipped_nodes(start_node, end_node)
         start_node_object = self.get_node_object(start_node)
         self.__running_status = WorkflowStatus.RUNNING
-        self.__running_nodes.append(start_node)
+        self.add_running_node(start_node)
         self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, start_node)
 
         if isinstance(start_node_object, PNode):
             self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.RUNNING, start_node_object)
-            start_node_object.run()
+            self.run_node(start_node)
 
         # loop over nodes
-        while len(self.__running_nodes):
+        while not self.__stopped:
             self.__run_step(end_node)
-            time.sleep(1)
 
-        # print("See the output log to directory %s" % self.__logging_dir)
-        if self.get_some_failed_task():
-            # print("something failed")
+            if not self.is_running():
+                if self.get_some_failed_task():
+                    # There are failed tasks, set status and wait for user to retry
+                    self.__running_status = WorkflowStatus.FAILED
+                    self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, 'Workflow failed, waiting for retry.')
+                    self.__resume_event.clear()
+                    self.__resume_event.wait(timeout=1)
+                else:
+                    # No running nodes and no failed nodes, we are done
+                    self.__running_status = WorkflowStatus.ENDED
+                    self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, end_node)
+                    break
+
+            time.sleep(0.2)
+
+        if self.__stopped and self.__running_status != WorkflowStatus.ENDED:
             self.__running_status = WorkflowStatus.FAILED
-            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, '')
-        else:
-            # print("something not failed")
-            self.__running_status = WorkflowStatus.ENDED
-            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, end_node)
+            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow stopped")

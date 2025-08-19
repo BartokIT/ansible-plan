@@ -3,6 +3,7 @@ print(f"Backend CWD: {os.getcwd()}")
 import signal
 import sys
 import threading
+import time
 from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
@@ -166,13 +167,7 @@ def restart_node(node_id: str):
         if not current_workflow:
             raise HTTPException(status_code=404, detail="Workflow not found.")
 
-        node_obj = current_workflow.get_node_object(node_id)
-        if not isinstance(node_obj, PNode):
-            raise HTTPException(status_code=404, detail="Node is not a playbook node.")
-
-        # This is a simplified restart logic.
-        current_workflow.add_running_node(node_id)
-        current_workflow.run_node(node_id)
+        current_workflow.restart_failed_node(node_id)
 
     return {"message": f"Node {node_id} restarting."}
 
@@ -194,8 +189,13 @@ def skip_node(node_id: str):
 @app.post("/shutdown")
 def shutdown():
     with workflow_lock:
-        if current_workflow and current_workflow.get_running_status() == WorkflowStatus.RUNNING:
-            raise HTTPException(status_code=409, detail="Cannot shutdown while a workflow is running.")
+        if current_workflow:
+            if current_workflow.get_running_status() == WorkflowStatus.RUNNING:
+                raise HTTPException(status_code=409, detail="Cannot shutdown while a workflow is running.")
+            # Tell the workflow thread to stop
+            current_workflow.stop()
+            # Give the thread a moment to stop
+            time.sleep(1.5)
 
         # This is a simple way to shutdown for this app.
         # In a real production app, a more graceful shutdown mechanism would be needed.
