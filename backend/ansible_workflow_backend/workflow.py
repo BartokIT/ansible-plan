@@ -527,6 +527,11 @@ class AnsibleWorkflow():
             return
 
         self._logger.info(f"Restarting node {node_id}")
+
+        # Set status back to RUNNING
+        self.__running_status = WorkflowStatus.RUNNING
+        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, f"Workflow resuming from node {node_id}")
+
         # Reset node status
         node.reset_status()
 
@@ -586,9 +591,11 @@ class AnsibleWorkflow():
 
             if not self.is_running():
                 if self.get_some_failed_task():
-                    # There are failed tasks, wait for user to retry
+                    # There are failed tasks, set status and wait for user to retry
+                    self.__running_status = WorkflowStatus.FAILED
+                    self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, 'Workflow failed, waiting for retry.')
                     self.__resume_event.clear()
-                    self.__resume_event.wait(timeout=1) # Use timeout to handle stop signal
+                    self.__resume_event.wait()
                 else:
                     # No running nodes and no failed nodes, we are done
                     self.__running_status = WorkflowStatus.ENDED
