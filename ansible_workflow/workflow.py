@@ -14,6 +14,7 @@ import os
 import os.path
 import logging
 from .exceptions import AnsibleWorkflowDuplicateNodeId, ExitCodes
+from .models import BlockNodeInfo, PlaybookNodeInfo
 
 
 class WorkflowStatus(Enum):
@@ -99,6 +100,15 @@ class BNode(Node):
     def get_type(self):
         return 'block'
 
+    def to_info(self) -> BlockNodeInfo:
+        status = self.get_status()
+        status_str = status.value if hasattr(status, 'value') else str(status)
+        return BlockNodeInfo(
+            id=self.get_id(),
+            status=status_str,
+            type=self.get_type(),
+        )
+
 
 class PNode(Node):
     def __init__(self, id, playbook, inventory, artifact_dir, limit=None, project_path=None, extra_vars={}, vault_ids=[], check_mode=False, diff_mode=True, verbosity=1, description='N/A', reference='N/A'):
@@ -178,6 +188,21 @@ class PNode(Node):
         return self.__description
     def get_reference(self):
         return self.__reference
+
+    def to_info(self) -> PlaybookNodeInfo:
+        status = self.get_status()
+        status_str = status.value if hasattr(status, 'value') else str(status)
+        telemetry = self.get_telemetry()
+        return PlaybookNodeInfo(
+            id=self.get_id(),
+            status=status_str,
+            type=self.get_type(),
+            playbook=self.get_playbook(),
+            description=self.get_description(),
+            reference=self.get_reference(),
+            started=telemetry.get('started', ''),
+            ended=telemetry.get('ended', '')
+        )
 
     def reset_status(self):
         self.__thread = None

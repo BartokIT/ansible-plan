@@ -17,7 +17,7 @@ from .exceptions import (
 )
 from .loader import WorkflowYamlLoader
 from .models import WorkflowStartRequest, PlaybookNodeInfo, BlockNodeInfo
-from .workflow import AnsibleWorkflow, PNode, WorkflowStatus, BNode
+from .workflow import AnsibleWorkflow, WorkflowStatus
 
 app = FastAPI()
 
@@ -85,32 +85,11 @@ class WorkflowAPI:
             if not self.current_workflow:
                 return []
 
-            nodes_data = []
-            for node_id in self.current_workflow.get_nodes():
-                node_obj = self.current_workflow.get_node_object(node_id)
-                status = node_obj.get_status()
-                status_str = status.value if hasattr(status, 'value') else str(status)
-
-                if isinstance(node_obj, PNode):
-                    telemetry = node_obj.get_telemetry()
-                    node_info = PlaybookNodeInfo(
-                        id=node_obj.get_id(),
-                        status=status_str,
-                        type=node_obj.get_type(),
-                        playbook=node_obj.get_playbook(),
-                        description=node_obj.get_description(),
-                        reference=node_obj.get_reference(),
-                        started=telemetry.get('started', ''),
-                        ended=telemetry.get('ended', '')
-                    )
-                    nodes_data.append(node_info)
-                elif isinstance(node_obj, BNode):
-                    node_info = BlockNodeInfo(
-                        id=node_obj.get_id(),
-                        status=status_str,
-                        type=node_obj.get_type(),
-                    )
-                    nodes_data.append(node_info)
+            nodes_data = [
+                self.current_workflow.get_node_object(node_id).to_info()
+                for node_id in self.current_workflow.get_nodes()
+                if hasattr(self.current_workflow.get_node_object(node_id), 'to_info')
+            ]
             return nodes_data
 
     def get_workflow_graph(self):
