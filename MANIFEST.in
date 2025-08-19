@@ -1,1 +1,1 @@
-include ansible_workflow/style.css
+include ansible_workflow/output/textual/style.css

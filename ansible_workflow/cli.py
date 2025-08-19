@@ -12,7 +12,8 @@ import httpx
 import subprocess
 import time
 
-from .output import StdoutWorkflowOutput, TextualWorkflowOutput
+from .output.stdout import StdoutWorkflowOutput
+from .output.textual.app import TextualWorkflowOutput
 from ansible.cli.arguments import option_helpers as opt_help
 from ansible.parsing.splitter import parse_kv
 
