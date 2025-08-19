@@ -1,4 +1,5 @@
 from enum import Enum
+import warnings
 import threading
 import os
 import logging
@@ -20,7 +21,9 @@ from textual import work
 from textual.reactive import reactive
 from textual.css.query import NoMatches
 import itertools
-import networkx as nx
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", message="networkx backend defined more than once: nx-loopback")
+    import networkx as nx
 import httpx
 
 from .api_client import ApiClient
