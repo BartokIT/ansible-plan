@@ -125,6 +125,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
 
     def draw_init(self):
         self._logger.debug("Initializing stdout output")
+        if self.is_verify_only():
+            self.__console.print("[bold yellow]Running in VERIFY ONLY mode[/]", justify="center")
         self.__console.print("[italic]Waiting for workflow to start...[/]", justify="center")
 
         nodes = self.api_client.get_all_nodes()
@@ -290,6 +292,10 @@ class TextualWorkflowOutput(WorkflowOutput):
             super().__init__()
             self.outer_instance = outer_instance
             self.workflow_filename = os.path.basename(cmd_args.workflow)
+            if self.outer_instance.is_verify_only():
+                self.title = f"Workflow Viewer (Verify Only)"
+            else:
+                self.title = "Workflow Viewer"
             self.theme = "gruvbox"
             self.api_client = outer_instance.api_client
             self.selected_node_id = None
