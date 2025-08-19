@@ -21,6 +21,7 @@ from textual.reactive import reactive
 from textual.css.query import NoMatches
 import itertools
 import networkx as nx
+import httpx
 
 from .api_client import ApiClient
 
@@ -137,29 +138,31 @@ class StdoutWorkflowOutput(WorkflowOutput):
         table.add_column("Ref.", style="cyan")
         table.add_column("Status")
 
-        for node in nodes:
-            if node['type'] == 'playbook':
-                self.known_nodes[node['id']] = node
-                table.add_row(
-                    node['id'],
-                    node.get('playbook', 'N/A'),
-                    node.get('reference', 'N/A'),
-                    self._render_status(node['status'])
-                )
+        if nodes:
+            for node in nodes:
+                if node['type'] == 'playbook':
+                    self.known_nodes[node['id']] = node
+                    table.add_row(
+                        node['id'],
+                        node.get('playbook', 'N/A'),
+                        node.get('reference', 'N/A'),
+                        self._render_status(node['status'])
+                    )
         self.__console.print(table)
         self.__console.print("")
         self.__console.print("[italic]Running[/] ...", justify="center")
 
     def draw_step(self):
         nodes = self.api_client.get_all_nodes()
-        for node in nodes:
-            node_id = node['id']
-            if node_id in self.known_nodes and self.known_nodes[node_id]['status'] != node['status']:
-                self.print_node_status_change(node)
-                self.known_nodes[node_id] = node
+        if nodes:
+            for node in nodes:
+                node_id = node['id']
+                if node_id in self.known_nodes and self.known_nodes[node_id]['status'] != node['status']:
+                    self.print_node_status_change(node)
+                    self.known_nodes[node_id] = node
 
-                if node['status'] == NodeStatus.FAILED.value and self.__interactive_retry:
-                    self.handle_retry(node)
+                    if node['status'] == NodeStatus.FAILED.value and self.__interactive_retry:
+                        self.handle_retry(node)
 
 
     def draw_pause(self):
@@ -175,14 +178,15 @@ class StdoutWorkflowOutput(WorkflowOutput):
         table.add_column("Ref.", style="cyan")
         table.add_column("Status")
 
-        for node in nodes:
-            if node['type'] == 'playbook':
-                table.add_row(
-                    node['id'],
-                    node.get('playbook', 'N/A'),
-                    node.get('reference', 'N/A'),
-                    self._render_status(node['status'])
-                )
+        if nodes:
+            for node in nodes:
+                if node['type'] == 'playbook':
+                    table.add_row(
+                        node['id'],
+                        node.get('playbook', 'N/A'),
+                        node.get('reference', 'N/A'),
+                        self._render_status(node['status'])
+                    )
         self.__console.print(table)
         self.__console.print("")
         self._logger.debug("stdout output ends")
@@ -239,7 +243,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
             y_or_n = self.__console.input('  │ >>>>>>>>>>>>>>>> │ ')
             if y_or_n == 'l':
                 stdout = self.api_client.get_node_stdout(node['id'])
-                self.__console.print(stdout)
+                if stdout:
+                    self.__console.print(stdout)
 
 
         if y_or_n == 'y':
@@ -279,7 +284,7 @@ class TextualWorkflowOutput(WorkflowOutput):
     class WorkflowApp(App):
         CSS_PATH = "style.css"
 
-        status_message = reactive("")
+        status_message = reactive("Connecting to backend...")
 
         def __init__(self, outer_instance, cmd_args):
             super().__init__()
@@ -318,7 +323,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                     playbook_stdout_log = RichLog(id="playbook_stdout", markup=False, highlight=True)
                     playbook_stdout_log.highlighter = NullHighlighter()
                     yield playbook_stdout_log
-            yield Static("", id="status_bar")
+            yield Static("Connecting to backend...", id="status_bar")
             yield Footer()
 
         def watch_status_message(self, message: str) -> None:
@@ -329,10 +334,12 @@ class TextualWorkflowOutput(WorkflowOutput):
                 pass
 
         def update_health_status(self) -> None:
+            action_buttons = self.query_one("#action_buttons")
             if self.api_client.check_health():
-                self.status_message = "Backend: Connected"
+                self.status_message = "[green]Backend: Connected[/green]"
             else:
-                self.status_message = "Backend: Disconnected"
+                self.status_message = "[red]Backend: Disconnected[/red]"
+                action_buttons.display = False
 
         def on_mount(self) -> None:
             self.initial_setup()
@@ -348,13 +355,15 @@ class TextualWorkflowOutput(WorkflowOutput):
         def initial_setup(self):
             # Fetch graph and node data once
             edges = self.api_client.get_workflow_graph()
-            self.graph.add_edges_from(edges)
+            if edges is not None:
+                self.graph.add_edges_from(edges)
             if "_root" not in self.graph:
                 self.graph.add_node("_root")
 
             nodes = self.api_client.get_all_nodes()
-            for node in nodes:
-                self.node_data[node['id']] = node
+            if nodes is not None:
+                for node in nodes:
+                    self.node_data[node['id']] = node
 
             # Build the tree
             tree = self.query_one(Tree)
@@ -391,6 +400,8 @@ class TextualWorkflowOutput(WorkflowOutput):
         def update_node_statuses(self):
             # Sanitize the data from the API to prevent processing duplicate statuses
             nodes_from_api = self.api_client.get_all_nodes()
+            if nodes_from_api is None:
+                return
             final_node_states = {node['id']: node for node in nodes_from_api}
 
             for node_id, node in final_node_states.items():
@@ -411,7 +422,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                         # The spinner, if it exists, will see the state change and stop itself.
                         # We just set the final label.
                         if node.get('type') == 'block':
-                            label = f"[b]{node_id}[/b]"
+                            label = f"[b]{child_id}[/b]"
                         else:
                             icon = self.status_icons.get(status, " ")
                             label = f"{icon} {node_id}"
@@ -482,6 +493,30 @@ class TextualWorkflowOutput(WorkflowOutput):
             # Hide buttons after action
             self.query_one("#action_buttons").display = False
 
+        @work(exclusive=True, thread=True)
+        def watch_stdout(self, node_id: str):
+            stdout_log = self.query_one("#playbook_stdout", RichLog)
+            last_content = self.api_client.get_node_stdout(node_id)
+            if last_content is None:
+                return
+
+            while not self._shutdown_event.is_set():
+                time.sleep(0.5)
+                current_stdout = self.api_client.get_node_stdout(node_id)
+                if current_stdout is None:
+                    break
+                if current_stdout != last_content:
+                    new_content = current_stdout[len(last_content):]
+                    text = Text.from_ansi(new_content)
+                    stdout_log.write(text)
+                    last_content = current_stdout
+
+                status_response = self.api_client.get_all_nodes()
+                if status_response is None:
+                    break
+                node_status = next((n['status'] for n in status_response if n['id'] == node_id), None)
+                if node_status != NodeStatus.RUNNING.value:
+                    break
 
         @work(thread=True)
         def update_spinner(self, tree_node, node_data):
@@ -498,7 +533,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                 # Use the original node_data for static info like type and id
                 if node_data.get('type') == 'block':
-                    label = f"{icon} [b]{node_id}[/b]"
+                    label = f"{icon} [b]{child_id}[/b]"
                 else:
                     label = f"{icon} {node_id}"
 
@@ -521,24 +556,6 @@ class TextualWorkflowOutput(WorkflowOutput):
             stdout_log = self.query_one("#playbook_stdout", RichLog)
             stdout_log.clear()
             stdout = self.api_client.get_node_stdout(node_id)
-            text = Text.from_ansi(stdout)
-            stdout_log.write(text)
-
-        @work(exclusive=True, thread=True)
-        def watch_stdout(self, node_id: str):
-            stdout_log = self.query_one("#playbook_stdout", RichLog)
-            last_content = self.api_client.get_node_stdout(node_id)
-
-            while not self._shutdown_event.is_set():
-                time.sleep(0.5)
-                current_stdout = self.api_client.get_node_stdout(node_id)
-                if current_stdout != last_content:
-                    new_content = current_stdout[len(last_content):]
-                    text = Text.from_ansi(new_content)
-                    stdout_log.write(text)
-                    last_content = current_stdout
-
-                status_response = self.api_client.get_all_nodes()
-                node_status = next((n['status'] for n in status_response if n['id'] == node_id), None)
-                if node_status != NodeStatus.RUNNING.value:
-                    break
+            if stdout is not None:
+                text = Text.from_ansi(stdout)
+                stdout_log.write(text)
