@@ -422,7 +422,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                         # The spinner, if it exists, will see the state change and stop itself.
                         # We just set the final label.
                         if node.get('type') == 'block':
-                            label = f"[b]{child_id}[/b]"
+                            label = f"[b]{node_id}[/b]"
                         else:
                             icon = self.status_icons.get(status, " ")
                             label = f"{icon} {node_id}"
@@ -533,7 +533,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                 # Use the original node_data for static info like type and id
                 if node_data.get('type') == 'block':
-                    label = f"{icon} [b]{child_id}[/b]"
+                    label = f"{icon} [b]{node_id}[/b]"
                 else:
                     label = f"{icon} {node_id}"
 
