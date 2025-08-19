@@ -267,6 +267,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         self._define_logger(logging_dir, log_level)
         self.api_client = ApiClient(backend_url)
         self.cmd_args = cmd_args
+        self.__verify_only = cmd_args.verify_only
         self.app = self.WorkflowApp(self, cmd_args)
 
     def run(self):
