@@ -19,7 +19,6 @@ from textual import work
 from textual.reactive import reactive
 import itertools
 import networkx as nx
-import httpx
 
 from .api_client import ApiClient
 
@@ -345,13 +344,15 @@ class TextualWorkflowOutput(WorkflowOutput):
         def initial_setup(self):
             # Fetch graph and node data once
             edges = self.api_client.get_workflow_graph()
-            self.graph.add_edges_from(edges)
+            if edges is not None:
+                self.graph.add_edges_from(edges)
             if "_root" not in self.graph:
                 self.graph.add_node("_root")
 
             nodes = self.api_client.get_all_nodes()
-            for node in nodes:
-                self.node_data[node['id']] = node
+            if nodes is not None:
+                for node in nodes:
+                    self.node_data[node['id']] = node
 
             # Build the tree
             tree = self.query_one(Tree)
@@ -390,6 +391,8 @@ class TextualWorkflowOutput(WorkflowOutput):
         def update_node_statuses(self):
             # Sanitize the data from the API to prevent processing duplicate statuses
             nodes_from_api = self.api_client.get_all_nodes()
+            if nodes_from_api is None:
+                return
             final_node_states = {node['id']: node for node in nodes_from_api}
 
             for node_id, node in final_node_states.items():
@@ -481,6 +484,30 @@ class TextualWorkflowOutput(WorkflowOutput):
             # Hide buttons after action
             self.query_one("#action_buttons").display = False
 
+        @work(exclusive=True, thread=True)
+        def watch_stdout(self, node_id: str):
+            stdout_log = self.query_one("#playbook_stdout", RichLog)
+            last_content = self.api_client.get_node_stdout(node_id)
+            if last_content is None:
+                return
+
+            while not self._shutdown_event.is_set():
+                time.sleep(0.5)
+                current_stdout = self.api_client.get_node_stdout(node_id)
+                if current_stdout is None:
+                    break
+                if current_stdout != last_content:
+                    new_content = current_stdout[len(last_content):]
+                    text = Text.from_ansi(new_content)
+                    stdout_log.write(text)
+                    last_content = current_stdout
+
+                status_response = self.api_client.get_all_nodes()
+                if status_response is None:
+                    break
+                node_status = next((n['status'] for n in status_response if n['id'] == node_id), None)
+                if node_status != NodeStatus.RUNNING.value:
+                    break
 
         @work(thread=True)
         def update_spinner(self, tree_node, node_data):
@@ -520,13 +547,16 @@ class TextualWorkflowOutput(WorkflowOutput):
             stdout_log = self.query_one("#playbook_stdout", RichLog)
             stdout_log.clear()
             stdout = self.api_client.get_node_stdout(node_id)
-            text = Text.from_ansi(stdout)
-            stdout_log.write(text)
+            if stdout is not None:
+                text = Text.from_ansi(stdout)
+                stdout_log.write(text)
 
         @work(exclusive=True, thread=True)
         def watch_stdout(self, node_id: str):
             stdout_log = self.query_one("#playbook_stdout", RichLog)
             last_content = self.api_client.get_node_stdout(node_id)
+            if last_content is None:
+                return
 
             while not self._shutdown_event.is_set():
                 time.sleep(0.5)

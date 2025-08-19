@@ -1,49 +1,70 @@
 import httpx
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 class ApiClient:
     def __init__(self, base_url: str):
         self.base_url = base_url
         self.client = httpx.Client(base_url=self.base_url)
 
-    def get_workflow_status(self) -> str:
-        response = self.client.get("/workflow")
-        response.raise_for_status()
-        return response.json()["status"]
+    def get_workflow_status(self) -> Optional[str]:
+        try:
+            response = self.client.get("/workflow")
+            response.raise_for_status()
+            return response.json()["status"]
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            return None
 
-    def get_all_nodes(self) -> List[Dict[str, Any]]:
-        response = self.client.get("/workflow/nodes")
-        response.raise_for_status()
-        return response.json()
+    def get_all_nodes(self) -> Optional[List[Dict[str, Any]]]:
+        try:
+            response = self.client.get("/workflow/nodes")
+            response.raise_for_status()
+            return response.json()
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            return None
 
-    def get_workflow_graph(self) -> List[List[str]]:
-        response = self.client.get("/workflow/graph")
-        response.raise_for_status()
-        return response.json()["edges"]
+    def get_workflow_graph(self) -> Optional[List[List[str]]]:
+        try:
+            response = self.client.get("/workflow/graph")
+            response.raise_for_status()
+            return response.json()["edges"]
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            return None
 
-    def get_node_stdout(self, node_id: str) -> str:
-        response = self.client.get(f"/workflow/node/{node_id}/stdout")
-        response.raise_for_status()
-        return response.json()["stdout"]
+    def get_node_stdout(self, node_id: str) -> Optional[str]:
+        try:
+            response = self.client.get(f"/workflow/node/{node_id}/stdout")
+            response.raise_for_status()
+            return response.json()["stdout"]
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            return None
 
     def stop_workflow(self):
-        response = self.client.post("/workflow/stop")
-        response.raise_for_status()
+        try:
+            response = self.client.post("/workflow/stop")
+            response.raise_for_status()
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            pass
 
     def shutdown_backend(self):
         try:
             self.client.post("/shutdown")
-        except httpx.ReadError:
+        except (httpx.ReadError, httpx.ConnectError, httpx.HTTPStatusError):
             # This is expected as the server will shut down before sending a response
             pass
 
     def restart_node(self, node_id: str):
-        response = self.client.post(f"/workflow/node/{node_id}/restart")
-        response.raise_for_status()
+        try:
+            response = self.client.post(f"/workflow/node/{node_id}/restart")
+            response.raise_for_status()
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            pass
 
     def skip_node(self, node_id: str):
-        response = self.client.post(f"/workflow/node/{node_id}/skip")
-        response.raise_for_status()
+        try:
+            response = self.client.post(f"/workflow/node/{node_id}/skip")
+            response.raise_for_status()
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            pass
 
     def check_health(self) -> bool:
         try:
