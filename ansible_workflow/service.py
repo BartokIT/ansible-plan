@@ -72,14 +72,18 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
             aw = loader.parse(request.extra_vars)
             current_workflow = aw
         except (
-            AnsibleWorkflowVaultScript,
-            AnsibleWorkflowValidationError,
-            AnsibleWorkflowYAMLNotValid,
             AnsibleWorkflowLoadingError,
             jinja2.exceptions.UndefinedError,
-            AnsibleWorkflowPlaybookNodeCheck,
         ) as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            aw = AnsibleWorkflow(
+                workflow_file=request.workflow_file,
+                logging_dir=logging_dir,
+                log_level=request.log_level,
+            )
+            aw.add_validation_error(str(e))
+            aw.set_status(WorkflowStatus.FAILED)
+            current_workflow = aw
+            return {"status": WorkflowStatus.FAILED, "validation_errors": [str(e)]}
 
         if request.filter_nodes:
             aw.set_filtered_nodes(request.filter_nodes)

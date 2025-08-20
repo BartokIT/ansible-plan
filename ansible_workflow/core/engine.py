@@ -32,6 +32,12 @@ class AnsibleWorkflow():
     def get_validation_errors(self):
         return self._validation_errors
 
+    def add_validation_error(self, error: str):
+        self._validation_errors.append(error)
+
+    def set_status(self, status: WorkflowStatus):
+        self.__running_status = status
+
     def get_workflow_file(self):
         return self.__workflow_file
 
