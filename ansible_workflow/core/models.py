@@ -5,6 +5,7 @@ import abc
 import os
 import logging
 import ansible_runner
+from .exceptions import AnsibleWorkflowPlaybookNodeCheck
 
 
 class WorkflowStatus(Enum):
@@ -110,21 +111,21 @@ class PNode(Node):
         self.__reference = reference
 
     def check_node_input(self):
-        valid = True
         # convert project path in absolute path
         if not os.path.isabs(self.__project_path):
             self.__project_path = os.path.abspath(self.__project_path)
 
         if not os.path.exists(self.__project_path):
-            self._logger.error("Node %s project path %s doesn't exists" % (self.get_id(), self.__project_path))
-            valid = False
+            raise AnsibleWorkflowPlaybookNodeCheck(
+                "Node %s project path %s doesn't exists" % (self.get_id(), self.__project_path)
+            )
 
         if self.__inventory is None:
-            self._logger.error("Node %s inventory not set" % self.get_id())
-            valid = False
+            raise AnsibleWorkflowPlaybookNodeCheck("Node %s inventory not set" % self.get_id())
         elif not os.path.exists(self.__inventory):
-            self._logger.error("Node %s inventory doesn't exists: %s" % (self.get_id(), self.__inventory))
-            valid = False
+            raise AnsibleWorkflowPlaybookNodeCheck(
+                "Node %s inventory doesn't exists: %s" % (self.get_id(), self.__inventory)
+            )
         else:
             self.__inventory = os.path.abspath(self.__inventory)
 
@@ -132,9 +133,9 @@ class PNode(Node):
             self.__playbook = os.path.join(self.__project_path, self.__playbook)
 
         if not os.path.exists(self.__playbook):
-            self._logger.error("Node %s playbook doesn't exists: %s" % (self.get_id(), self.__playbook))
-            valid = False
-        return valid
+            raise AnsibleWorkflowPlaybookNodeCheck(
+                "Node %s playbook doesn't exists: %s" % (self.get_id(), self.__playbook)
+            )
 
     def get_verbosity(self):
         return self.__verbosity
