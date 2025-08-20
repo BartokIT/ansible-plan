@@ -1,0 +1,14 @@
+---
+options:
+  vault_script: non_existent_vault_script.py
+defaults:
+  inventory: inventory.ini
+workflow:
+  - id: 1
+    block:
+      - id: 1.1
+        import_playbook: playbooks/first.yml
+        vault_ids:
+          - test
+      - id: 1.2
+        import_playbook: playbooks/second.yml

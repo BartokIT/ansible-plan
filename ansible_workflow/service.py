@@ -74,6 +74,7 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
         except (
             AnsibleWorkflowLoadingError,
             jinja2.exceptions.UndefinedError,
+            AnsibleWorkflowVaultScript,
         ) as e:
             aw = AnsibleWorkflow(
                 workflow_file=request.workflow_file,
