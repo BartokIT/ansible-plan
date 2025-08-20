@@ -9,10 +9,10 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List
 
-from ansible_workflow_service.core.loader import WorkflowYamlLoader
-from ansible_workflow_service.core.engine import AnsibleWorkflow
-from ansible_workflow_service.core.models import NodeStatus, WorkflowStatus, PNode
-from ansible_workflow_service.core.exceptions import (
+from .core.loader import WorkflowYamlLoader
+from .core.engine import AnsibleWorkflow
+from .core.models import NodeStatus, WorkflowStatus, PNode
+from .core.exceptions import (
     AnsibleWorkflowLoadingError,
     AnsibleWorkflowValidationError,
     AnsibleWorkflowVaultScript,
