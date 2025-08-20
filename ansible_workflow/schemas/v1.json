@@ -1,0 +1,185 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://example.com/product.schema.json",
+    "title": "Workflow",
+    "description": "The definition of workflow",
+    "type": "object",
+    "properties": {
+        "meta": {
+            "description": "Contains metadata",
+            "type": "object",
+            "properties": {
+                "format-version": {
+                    "description": "Specify the format version for the workflow",
+                    "type": "integer"
+                }
+            },
+            "additionalProperties": false
+        },
+        "templating": {
+            "description": "Contains variable for templating",
+            "type": "object"
+        },
+        "options": {
+            "description": "Contains options",
+            "type": "object",
+            "properties": {
+                "global_path": {
+                    "description": "Base path for all relative path",
+                    "type": "string"
+                },
+                "vault_script": {
+                    "description": "Path for the vault script",
+                    "type": "string"
+                }
+            },
+            "additionalProperties": false
+        },
+        "defaults": {
+            "description": "Contains default values",
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+                "vars": {
+                    "description": "Allow to specify default extra vars to be passed to the playbook execution",
+                    "type": "object"
+                },
+                "vault_ids": {
+                    "description": "Allow to specify default vault ids to be passed to the playbook execution",
+                    "type": "array"
+                },
+                "verbosity": {
+                    "description": "Allow to specify a default verbosity level for all playbooks",
+                    "type": "number"
+                },
+                "inventory": {
+                    "description": "Allow to specify default inventory to be passed to the playbook execution",
+                    "type": "string"
+                },
+                "project_path": {
+                    "description": "Allow to specify default project path vars to be passed to the playbook execution",
+                    "type": "string"
+                },
+                "limit": {
+                    "description": "Allow to specify default limits parameter to be passed to the playbook execution",
+                    "type": ["string", "null"]
+                }
+            }
+        },
+        "workflow": {
+            "description": "Contains workflow specification",
+            "type": "array",
+            "items": {
+                "$ref": "#/$defs/block"
+            }
+        }
+    },
+    "additionalProperties": false,
+    "required": [
+        "workflow"
+    ],
+    "$defs": {
+        "block": {
+            "description": "Describe a node",
+            "type": "object",
+            "oneOf": [
+                {
+                    "properties": {
+                        "id": {
+                            "description": "Identifier for the node inside the workflow",
+                            "type": ["number", "string"]
+                        },
+                        "import_playbook": {
+                            "description": "Path for the playbook, can be relative to the project key",
+                            "type": "string"
+                        },
+                        "vars": {
+                            "description": "Allow to specify vars to be passed to the playbook execution",
+                            "type": "object"
+                        },
+                        "vault_ids": {
+                            "description": "Allow to specify vault ids to be passed to the playbook execution",
+                            "type": "array"
+                        },
+                        "inventory": {
+                            "description": "Allow to specify inventory to be passed to the playbook execution",
+                            "type": "string"
+                        },
+                        "project_path": {
+                            "description": "Allow to specify project path to be passed to the playbook execution.",
+                            "type": "string"
+                        },
+                        "limit": {
+                            "description": "Allow to specify limit to be passed to the playbook execution",
+                            "type": "string"
+                        },
+                        "description": {
+                            "description": "Describes what the node does",
+                            "type": "string"
+                        },
+                        "reference": {
+                            "description": "Tells who is the owner of the task",
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "import_playbook"
+                    ]
+                },
+                {
+                    "properties": {
+                        "id": {
+                            "description": "Identifier for the node inside the workflow",
+                            "type": ["number", "string"]
+                        },
+                        "strategy": {
+                            "description": "Wheither the block contains parallel or serial tasks",
+                            "type": "string",
+                            "pattern": "^serial|parallel$"
+                        },
+                        "block": {
+                            "description": "Allow to specify child nodes with an execution strategy",
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/$defs/block"
+                            }
+                        },
+                        "templating": {
+                            "description": "Contains variable for templating",
+                            "type": "object"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "block"
+                    ]
+                },
+                {
+                    "properties": {
+                        "id": {
+                            "description": "Identifier for the node inside the workflow",
+                            "type": ["number", "string"]
+                        },
+                        "id_prefix": {
+                            "description": "Allow to specify a prefix for all IDs contained in the inclusion",
+                            "type": "string"
+                        },
+                        "include_block": {
+                            "description": "Allow to specify child nodes with an execution strategy",
+                            "type": "string"
+                        },
+                        "templating": {
+                            "description": "Contains variable for templating",
+                            "type": "object"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "include_block"
+                    ]
+                }
+            ]
+        }
+    }
+}
