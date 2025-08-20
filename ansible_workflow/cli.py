@@ -31,7 +31,8 @@ import httpx
 import subprocess
 import time
 
-from .output import StdoutWorkflowOutput, TextualWorkflowOutput
+from .ui.stdout import StdoutWorkflowOutput
+from .ui.textual import TextualWorkflowOutput
 from ansible.cli.arguments import option_helpers as opt_help
 from ansible.parsing.splitter import parse_kv
 
@@ -62,10 +63,10 @@ def check_and_start_backend(logger):
         logger.info("Backend is already running.")
     except httpx.ConnectError:
         logger.info("Backend not running. Starting it now.")
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         with open(os.path.join(project_root, "backend_stdout.log"), "wb") as out, open(os.path.join(project_root, "backend_stderr.log"), "wb") as err:
             process = subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "backend.main:app", "--port", "8001"],
+                [sys.executable, "-m", "uvicorn", "ansible_workflow.service:app", "--port", "8001"],
                 cwd=project_root,
                 stdout=out,
                 stderr=err,
