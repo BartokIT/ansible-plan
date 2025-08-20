@@ -9,7 +9,7 @@ with warnings.catch_warnings():
 import os
 import logging
 import logging.handlers
-from .exceptions import AnsibleWorkflowDuplicateNodeId
+from .exceptions import AnsibleWorkflowDuplicateNodeId, AnsibleWorkflowPlaybookNodeCheck
 from .models import WorkflowStatus, NodeStatus, Node, PNode, WorkflowEventType, WorkflowEvent, WorkflowListener
 
 
@@ -27,6 +27,10 @@ class AnsibleWorkflow():
         self.__logging_dir = logging_dir
         self.__workflow_file = workflow_file
         self.__resume_event = threading.Event()
+        self._validation_errors = []
+
+    def get_validation_errors(self):
+        return self._validation_errors
 
     def get_workflow_file(self):
         return self.__workflow_file
@@ -66,25 +70,28 @@ class AnsibleWorkflow():
         self.__listeners.append(listener)
 
     def is_valid(self):
-        valid = True
         for node_id in self.__graph.nodes:
             if isinstance(self.__data[node_id]['object'], PNode):
-                if not self.__data[node_id]['object'].check_node_input():
-                    valid = False
-        if not valid:
-            self._logger.error("Impossible to run the workflow due to errors on some playbook")
+                try:
+                    self.__data[node_id]['object'].check_node_input()
+                except AnsibleWorkflowPlaybookNodeCheck as e:
+                    self._validation_errors.append(str(e))
 
         # search cycle
-        cycles_in_graph = True
         try:
-            nx.find_cycle(self.__graph)
+            cycle = nx.find_cycle(self.__graph)
+            error = "The workflow is cyclic: %s" % cycle
+            self._logger.error(error)
+            self._validation_errors.append(error)
         except nx.NetworkXNoCycle:
-            cycles_in_graph = False
+            pass
 
-        if cycles_in_graph:
-            self._logger.error("The workflow is cyclic")
-            valid = False
-        return valid
+        if self._validation_errors:
+            self._logger.error(
+                "Impossible to run the workflow due to errors on some playbook"
+            )
+            return False
+        return True
 
     def get_original_graph(self) -> nx.DiGraph:
         return self.__original_graph
@@ -304,8 +311,11 @@ class AnsibleWorkflow():
         # perform validation of the
         if not self.is_valid():
             self.__running_status = WorkflowStatus.FAILED
-            error = "Workflow is not valid.\nSee the logs at %s" % self.__logging_dir
-            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, error)
+            self.notify_event(
+                WorkflowEventType.WORKFLOW_EVENT,
+                self.__running_status,
+                self._validation_errors,
+            )
             return
 
         if verify_only:
