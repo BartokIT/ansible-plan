@@ -105,30 +105,24 @@ class TextualWorkflowOutput(WorkflowOutput):
                 pass
 
         @work(thread=True)
-        def update_workflow_status(self):
-            workflow_status = self.api_client.get_workflow_status()
-            if workflow_status and workflow_status.get('status') == 'failed':
-                errors = workflow_status.get('validation_errors')
-                if errors:
-                    # Display the first validation error in the status bar
-                    self.status_message = f"[bold red]Validation Error:[/bold red] {errors[0]}"
-                    # Potentially stop other updates if the workflow has failed validation
-                    # self.workers.cancel_all() # This might be too aggressive
-                    return # Stop further processing for this tick
-
-        def update_health_status(self) -> None:
+        def update_status(self):
             action_buttons = self.query_one("#action_buttons")
             if self.api_client.check_health():
                 self.status_message = "[green]Backend: Connected[/green]"
+
+                workflow_status = self.api_client.get_workflow_status()
+                if workflow_status and workflow_status.get('status') == 'failed':
+                    errors = workflow_status.get('validation_errors')
+                    if errors:
+                        self.status_message = f"[bold red]Validation Error:[/bold red] {errors[0]}"
             else:
                 self.status_message = "[red]Backend: Disconnected[/red]"
                 action_buttons.display = False
 
         def on_mount(self) -> None:
             self.initial_setup()
-            self.set_interval(5, self.update_health_status)
+            self.set_interval(1, self.update_status)
             self.set_interval(0.5, self.update_node_statuses)
-            self.set_interval(1, self.update_workflow_status)
 
         def action_quit(self) -> None:
             """Called when the user quits the application."""
