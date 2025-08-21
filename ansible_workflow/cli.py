@@ -246,13 +246,12 @@ def main():
         stdout_thread.start()
 
         def signal_handler(sig, frame):
-            y_or_n = console.input(' Do you want to quit the software? [y/n]')
-            if y_or_n.lower() == 'y':
-                try:
-                    httpx.post(f"{BACKEND_URL}/workflow/stop")
-                    console.print(" Workflow stopping command sent.")
-                except httpx.ConnectError:
-                    console.print("Could not connect to backend to stop workflow.")
+            console.print("\nDetaching from workflow. The backend will continue to run.")
+            console.print("To re-attach, run the same command again.")
+            stdout_thread.event.set()
+            # wait for the thread to finish
+            stdout_thread.join()
+            sys.exit(0)
 
         signal.signal(signal.SIGINT, signal_handler)
         stdout_thread.join()
