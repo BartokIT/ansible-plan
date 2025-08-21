@@ -64,13 +64,22 @@ def check_and_start_backend(logger):
     except httpx.ConnectError:
         logger.info("Backend not running. Starting it now.")
         project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        with open(os.path.join(project_root, "backend_stdout.log"), "wb") as out, open(os.path.join(project_root, "backend_stderr.log"), "wb") as err:
-            process = subprocess.Popen(
-                [sys.executable, "-m", "uvicorn", "ansible_workflow.service:app", "--port", "8001"],
-                cwd=project_root,
-                stdout=out,
-                stderr=err,
-            )
+
+        popen_kwargs = {
+            "cwd": project_root,
+            "stdout": open(os.path.join(project_root, "backend_stdout.log"), "wb"),
+            "stderr": open(os.path.join(project_root, "backend_stderr.log"), "wb"),
+        }
+
+        if os.name == 'nt':
+            popen_kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+        elif os.name == 'posix':
+            popen_kwargs['start_new_session'] = True
+
+        process = subprocess.Popen(
+            [sys.executable, "-m", "uvicorn", "ansible_workflow.service:app", "--port", "8001"],
+            **popen_kwargs
+        )
 
         for _ in range(10):
             try:
