@@ -65,7 +65,15 @@ class StdoutWorkflowOutput(WorkflowOutput):
         ''' Non blocking thread wait'''
         time.sleep(self._refresh_interval)
 
-    def draw_end(self):
+    def draw_end(self, status_data: dict = None):
+        if status_data:
+            errors = status_data.get('validation_errors')
+            if errors:
+                self.__console.print("\n[bold red]Workflow validation failed with errors:[/bold red]")
+                for error in errors:
+                    self.__console.print(f"- {error}")
+                self.__console.print("")
+
         nodes = self.api_client.get_all_nodes()
         table = Table(title="Running recap")
 

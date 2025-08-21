@@ -43,7 +43,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
     # The following methods are not used in Textual mode as the app handles the loop.
     def draw_init(self): pass
-    def draw_end(self): pass
+    def draw_end(self, status_data: dict = None): pass
     def draw_step(self): pass
     def draw_pause(self): pass
 
