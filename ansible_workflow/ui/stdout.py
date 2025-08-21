@@ -106,20 +106,28 @@ class StdoutWorkflowOutput(WorkflowOutput):
             return '[green]completed[/]'
         elif status == NodeStatus.FAILED.value:
             return '[bright_red]failed[/]'
-        elif status == NodeStatus.NOT_STARTED.value:
-            return '[white]not started[/]'
         elif status == NodeStatus.SKIPPED.value:
             return '[cyan]skipped[/]'
         else:
             return 'unknown'
 
     def print_node_status_change(self, node):
+        status = node.get('status')
+        timestamp = ''
+        if status == NodeStatus.RUNNING.value:
+            timestamp = node.get('started', '')
+        elif status in [NodeStatus.ENDED.value, NodeStatus.FAILED.value, NodeStatus.SKIPPED.value]:
+            timestamp = node.get('ended', '')
+
+        if not timestamp:
+            timestamp = datetime.now().strftime('%H:%M:%S')
+
         table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
         table.add_column()
         table.add_column()
         status_text = self._render_status(node['status'])
         table.add_row(
-            datetime.now().strftime('%H:%M:%S'),
+            timestamp,
             f"Node [cyan]{node['id']}[/] is {status_text}"
         )
         self.__console.print(table)
