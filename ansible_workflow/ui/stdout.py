@@ -106,6 +106,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
             return '[green]completed[/]'
         elif status == NodeStatus.FAILED.value:
             return '[bright_red]failed[/]'
+        elif status == NodeStatus.NOT_STARTED.value:
+            return '[white]not started[/]'
         elif status == NodeStatus.SKIPPED.value:
             return '[cyan]skipped[/]'
         else:
