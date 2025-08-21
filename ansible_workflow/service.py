@@ -17,6 +17,7 @@ from .core.exceptions import (
     AnsibleWorkflowValidationError,
     AnsibleWorkflowVaultScript,
     AnsibleWorkflowYAMLNotValid,
+    AnsibleWorkflowPlaybookNodeCheck,
 )
 import jinja2
 
@@ -71,13 +72,19 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
             aw = loader.parse(request.extra_vars)
             current_workflow = aw
         except (
-            AnsibleWorkflowVaultScript,
-            AnsibleWorkflowValidationError,
-            AnsibleWorkflowYAMLNotValid,
             AnsibleWorkflowLoadingError,
             jinja2.exceptions.UndefinedError,
+            AnsibleWorkflowVaultScript,
         ) as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            aw = AnsibleWorkflow(
+                workflow_file=request.workflow_file,
+                logging_dir=logging_dir,
+                log_level=request.log_level,
+            )
+            aw.add_validation_error(str(e))
+            aw.set_status(WorkflowStatus.FAILED)
+            current_workflow = aw
+            return {"status": WorkflowStatus.FAILED, "validation_errors": [str(e)]}
 
         if request.filter_nodes:
             aw.set_filtered_nodes(request.filter_nodes)
@@ -97,7 +104,14 @@ def get_workflow_status():
     with workflow_lock:
         if not current_workflow:
             return {"status": WorkflowStatus.NOT_STARTED}
-        return {"status": current_workflow.get_running_status()}
+
+        status = current_workflow.get_running_status()
+        response = {"status": status}
+        if status == WorkflowStatus.FAILED:
+            errors = current_workflow.get_validation_errors()
+            if errors:
+                response["validation_errors"] = errors
+        return response
 
 
 @app.get("/workflow/nodes")

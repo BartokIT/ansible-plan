@@ -6,11 +6,11 @@ class ApiClient:
         self.base_url = base_url
         self.client = httpx.Client(base_url=self.base_url)
 
-    def get_workflow_status(self) -> Optional[str]:
+    def get_workflow_status(self) -> Optional[Dict[str, Any]]:
         try:
             response = self.client.get("/workflow")
             response.raise_for_status()
-            return response.json()["status"]
+            return response.json()
         except (httpx.ConnectError, httpx.HTTPStatusError):
             return None
 

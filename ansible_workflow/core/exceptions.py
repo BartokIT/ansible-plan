@@ -64,3 +64,7 @@ class AnsibleWorkflowVaultScriptNotSet(AnsibleWorkflowVaultScript):
 
 class AnsibleWorkflowVaultScriptNotExists(AnsibleWorkflowVaultScript):
     """ Vault script not present """
+
+
+class AnsibleWorkflowPlaybookNodeCheck(AnsibleWorkflowConfigurationError):
+    """ Playbook node check error """

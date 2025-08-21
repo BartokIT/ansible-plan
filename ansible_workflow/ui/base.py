@@ -46,14 +46,16 @@ class WorkflowOutput(threading.Thread):
     def run(self):
         self._logger.info("WorkflowOutput run")
         self.draw_init()
-        status = self.api_client.get_workflow_status()
+        status_data = self.api_client.get_workflow_status()
+        status = status_data.get('status') if status_data else None
         while status not in [WorkflowStatus.ENDED.value, WorkflowStatus.FAILED.value]:
             self._logger.info(f"Checking status: {status}")
             self.draw_step()
             self.draw_pause()
-            status = self.api_client.get_workflow_status()
+            status_data = self.api_client.get_workflow_status()
+            status = status_data.get('status') if status_data else None
         self._logger.info(f"Final status: {status}. Exiting loop.")
-        self.draw_end()
+        self.draw_end(status_data=status_data)
 
     @abc.abstractmethod
     def draw_init(self, *args, **kwargs):
@@ -61,7 +63,7 @@ class WorkflowOutput(threading.Thread):
         pass
 
     @abc.abstractmethod
-    def draw_end(self, *args, **kwargs):
+    def draw_end(self, status_data: dict = None, *args, **kwargs):
         ''' Draw initialization'''
         pass
 

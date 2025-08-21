@@ -475,6 +475,7 @@ class WorkflowYamlLoader(WorkflowLoader):
                 pnode_parameters["vault_ids"] = vault_ids
 
                 gnode = PNode(**pnode_parameters)
+                gnode.set_logger(self._logger)
                 self._logger.debug("---- %s added node: %s, level: %s, block type: %s, block id: %s" %
                                    (indentation, pnode_parameters, level, strategy, block_id))
 

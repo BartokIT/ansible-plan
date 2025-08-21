@@ -43,7 +43,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
     # The following methods are not used in Textual mode as the app handles the loop.
     def draw_init(self): pass
-    def draw_end(self): pass
+    def draw_end(self, status_data: dict = None): pass
     def draw_step(self): pass
     def draw_pause(self): pass
 
@@ -104,17 +104,24 @@ class TextualWorkflowOutput(WorkflowOutput):
             except NoMatches:
                 pass
 
-        def update_health_status(self) -> None:
+        @work(thread=True)
+        def update_status(self):
             action_buttons = self.query_one("#action_buttons")
             if self.api_client.check_health():
                 self.status_message = "[green]Backend: Connected[/green]"
+
+                workflow_status = self.api_client.get_workflow_status()
+                if workflow_status and workflow_status.get('status') == 'failed':
+                    errors = workflow_status.get('validation_errors')
+                    if errors:
+                        self.status_message = f"[bold red]Validation Error:[/bold red] {errors[0]}"
             else:
                 self.status_message = "[red]Backend: Disconnected[/red]"
                 action_buttons.display = False
 
         def on_mount(self) -> None:
             self.initial_setup()
-            self.set_interval(5, self.update_health_status)
+            self.set_interval(1, self.update_status)
             self.set_interval(0.5, self.update_node_statuses)
 
         def action_quit(self) -> None:
