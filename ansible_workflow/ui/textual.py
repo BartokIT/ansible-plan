@@ -28,9 +28,9 @@ class QuitScreen(Screen):
     def compose(self) -> ComposeResult:
         yield Container(
             Container(
-                Static("Sei sicuro di voler uscire?", id="question"),
+                Static("Are you sure you want to quit?", id="question"),
                 Horizontal(
-                    Button("Sì", variant="error", id="quit"),
+                    Button("Yes", variant="error", id="quit"),
                     Button("No", variant="primary", id="cancel"),
                     id="buttons",
                 ),

@@ -77,10 +77,11 @@ RichLog {
 
 #dialog {
     width: 60;
-    height: auto;
+    height: 10;
     border: thick $primary-lighten-2;
     background: $surface;
     padding: 1 2;
+    align: center middle;
 }
 
 #question {
