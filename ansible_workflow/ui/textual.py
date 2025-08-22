@@ -2,6 +2,7 @@ import os
 import time
 import threading
 import itertools
+from itertools import cycle
 import warnings
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message="networkx backend defined more than once: nx-loopback")
@@ -13,6 +14,7 @@ from textual.widgets import Header, Footer, Static, Tree, RichLog, DataTable, Bu
 from textual.containers import Horizontal, Vertical
 from textual import work
 from textual.reactive import reactive
+from textual.theme import BUILTIN_THEMES
 from textual.css.query import NoMatches
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -50,7 +52,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
     class WorkflowApp(App):
         CSS_PATH = "style.css"
-        BINDINGS = [("t", "toggle_theme", "Toggle Theme")]
+        BINDINGS = [("t", "cycle_themes", "Cycle Themes")]
 
         status_message = reactive("Connecting to backend...")
 
@@ -62,14 +64,14 @@ class TextualWorkflowOutput(WorkflowOutput):
                 self.title = f"Workflow Viewer (Verify Only)"
             else:
                 self.title = "Workflow Viewer"
-            self.themes = ["dark", "light", "gruvbox"]
-            try:
-                self.theme_index = self.themes.index("gruvbox")
-            except ValueError:
-                self.theme_index = 0
-            self.theme = self.themes[self.theme_index]
+
             self.api_client = outer_instance.api_client
             self.selected_node_id = None
+            self.theme_cycle = cycle(BUILTIN_THEMES.keys())
+            self.theme = "gruvbox"
+            # Advance the cycle to the default theme
+            while next(self.theme_cycle) != self.theme:
+                pass
             self.tree_nodes = {}
             self.node_data = {}
             self.graph = nx.DiGraph()
@@ -135,10 +137,9 @@ class TextualWorkflowOutput(WorkflowOutput):
             self._shutdown_event.set()
             self.exit()
 
-        def action_toggle_theme(self) -> None:
-            """An action to toggle the theme."""
-            self.theme_index = (self.theme_index + 1) % len(self.themes)
-            self.app.theme = self.themes[self.theme_index]
+        def action_cycle_themes(self) -> None:
+            """An action to cycle themes."""
+            self.app.theme = next(self.theme_cycle)
 
         @work(thread=True)
         def initial_setup(self):
