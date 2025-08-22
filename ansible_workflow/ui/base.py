@@ -16,6 +16,7 @@ class WorkflowOutput(threading.Thread):
         self.api_client = ApiClient(backend_url)
         self._refresh_interval = 2
         self.__verify_only = cmd_args.verify_only
+        self.__interactive_retry = cmd_args.interactive_retry
         self.event: threading.Event = event
 
     def is_verify_only(self):
@@ -46,14 +47,25 @@ class WorkflowOutput(threading.Thread):
     def run(self):
         self._logger.info("WorkflowOutput run")
         self.draw_init()
-        status_data = self.api_client.get_workflow_status()
-        status = status_data.get('status') if status_data else None
-        while status not in [WorkflowStatus.ENDED.value, WorkflowStatus.FAILED.value] and not self.event.is_set():
-            self._logger.info(f"Checking status: {status}")
-            self.draw_step()
-            self.draw_pause()
+
+        status_data = None
+        while not self.event.is_set():
             status_data = self.api_client.get_workflow_status()
             status = status_data.get('status') if status_data else None
+            self._logger.info(f"Checking status: {status}")
+
+            if status == WorkflowStatus.ENDED.value:
+                break
+
+            if status == WorkflowStatus.FAILED.value and not self.__interactive_retry:
+                break
+
+            self.draw_step()
+
+            if hasattr(self, 'user_chose_to_quit') and self.user_chose_to_quit:
+                break
+
+            self.draw_pause()
 
         if not self.event.is_set():
             self._logger.info(f"Final status: {status}. Exiting loop.")

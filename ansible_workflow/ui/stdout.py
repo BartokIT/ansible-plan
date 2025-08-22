@@ -16,6 +16,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.__interactive_retry = cmd_args.interactive_retry
         self.__doubtful_mode = cmd_args.doubtful_mode
         self.known_nodes = {}
+        self.user_chose_to_quit = False
+        self.declined_retry_nodes = set()
 
     def draw_init(self):
         self._logger.debug("Initializing stdout output")
@@ -32,6 +34,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
         table.add_column("Node", justify="left", style="cyan", no_wrap=True)
         table.add_column("Playbook", style="bright_magenta")
         table.add_column("Ref.", style="cyan")
+        table.add_column("Started", style="green")
+        table.add_column("Ended", style="green")
         table.add_column("Status")
 
         if nodes:
@@ -42,14 +46,24 @@ class StdoutWorkflowOutput(WorkflowOutput):
                         node['id'],
                         node.get('playbook', 'N/A'),
                         node.get('reference', 'N/A'),
+                        node.get('started', ''),
+                        node.get('ended', ''),
                         self._render_status(node['status'])
                     )
         self.__console.print(table)
         self.__console.print("")
+
+        if nodes and self.__interactive_retry:
+            for node in nodes:
+                if node['status'] == NodeStatus.FAILED.value:
+                    if node['id'] not in self.declined_retry_nodes:
+                        self.handle_retry(node)
+
         self.__console.print("[italic]Running[/] ...", justify="center")
 
     def draw_step(self):
         nodes = self.api_client.get_all_nodes()
+        found_failed_node_to_prompt = False
         if nodes:
             for node in nodes:
                 node_id = node['id']
@@ -57,8 +71,14 @@ class StdoutWorkflowOutput(WorkflowOutput):
                     self.print_node_status_change(node)
                     self.known_nodes[node_id] = node
 
-                    if node['status'] == NodeStatus.FAILED.value and self.__interactive_retry:
+                if node['status'] == NodeStatus.FAILED.value and self.__interactive_retry:
+                    if node['id'] not in self.declined_retry_nodes:
                         self.handle_retry(node)
+                        found_failed_node_to_prompt = True
+
+        status_data = self.api_client.get_workflow_status()
+        if status_data.get('status') == 'failed' and not found_failed_node_to_prompt:
+            self.user_chose_to_quit = True
 
 
     def draw_pause(self):
@@ -169,3 +189,5 @@ class StdoutWorkflowOutput(WorkflowOutput):
             self.api_client.restart_node(node['id'])
         elif y_or_n == 's':
             self.api_client.skip_node(node['id'])
+        elif y_or_n == 'n':
+            self.declined_retry_nodes.add(node['id'])
