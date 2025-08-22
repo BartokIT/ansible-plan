@@ -11,7 +11,8 @@ from rich.highlighter import Highlighter
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Tree, RichLog, DataTable, Button
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, Container
+from textual.screen import Screen
 from textual import work
 from textual.reactive import reactive
 from textual.theme import BUILTIN_THEMES
@@ -19,6 +20,30 @@ from textual.css.query import NoMatches
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
 from .api_client import ApiClient
+
+
+class QuitScreen(Screen):
+    """Screen with a dialog to quit."""
+
+    def compose(self) -> ComposeResult:
+        yield Container(
+            Container(
+                Static("Sei sicuro di voler uscire?", id="question"),
+                Horizontal(
+                    Button("Sì", variant="error", id="quit"),
+                    Button("No", variant="primary", id="cancel"),
+                    id="buttons",
+                ),
+                id="dialog",
+            ),
+            id="quit_screen_container"
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "quit":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
 
 
 class NullHighlighter(Highlighter):
@@ -52,7 +77,10 @@ class TextualWorkflowOutput(WorkflowOutput):
 
     class WorkflowApp(App):
         CSS_PATH = "style.css"
-        BINDINGS = [("t", "cycle_themes", "Cycle Themes")]
+        BINDINGS = [
+            ("t", "cycle_themes", "Cycle Themes"),
+            ("q", "request_quit", "Quit")
+        ]
 
         status_message = reactive("Connecting to backend...")
 
@@ -136,6 +164,15 @@ class TextualWorkflowOutput(WorkflowOutput):
             """Called when the user quits the application."""
             self._shutdown_event.set()
             self.exit()
+
+        def action_request_quit(self) -> None:
+            """Action to display the quit dialog."""
+            self.push_screen(QuitScreen(), self.check_quit)
+
+        def check_quit(self, should_quit: bool) -> None:
+            """Called when the QuitScreen is dismissed."""
+            if should_quit:
+                self.action_quit()
 
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
