@@ -33,6 +33,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
         table.add_column("Node", justify="left", style="cyan", no_wrap=True)
         table.add_column("Playbook", style="bright_magenta")
         table.add_column("Ref.", style="cyan")
+        table.add_column("Started", style="green")
+        table.add_column("Ended", style="green")
         table.add_column("Status")
 
         if nodes:
@@ -43,6 +45,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
                         node['id'],
                         node.get('playbook', 'N/A'),
                         node.get('reference', 'N/A'),
+                        node.get('started', ''),
+                        node.get('ended', ''),
                         self._render_status(node['status'])
                     )
         self.__console.print(table)
