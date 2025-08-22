@@ -2,6 +2,7 @@ import os
 import time
 import threading
 import itertools
+from itertools import cycle
 import warnings
 with warnings.catch_warnings():
     warnings.filterwarnings("ignore", message="networkx backend defined more than once: nx-loopback")
@@ -10,13 +11,39 @@ from rich.highlighter import Highlighter
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Tree, RichLog, DataTable, Button
-from textual.containers import Horizontal, Vertical
+from textual.containers import Horizontal, Vertical, Container
+from textual.screen import Screen
 from textual import work
 from textual.reactive import reactive
+from textual.theme import BUILTIN_THEMES
 from textual.css.query import NoMatches
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
 from .api_client import ApiClient
+
+
+class QuitScreen(Screen):
+    """Screen with a dialog to quit."""
+
+    def compose(self) -> ComposeResult:
+        yield Container(
+            Container(
+                Static("Are you sure you want to quit?", id="question"),
+                Horizontal(
+                    Button("Yes", variant="error", id="quit"),
+                    Button("No", variant="primary", id="cancel"),
+                    id="buttons",
+                ),
+                id="dialog",
+            ),
+            id="quit_screen_container"
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "quit":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
 
 
 class NullHighlighter(Highlighter):
@@ -50,6 +77,10 @@ class TextualWorkflowOutput(WorkflowOutput):
 
     class WorkflowApp(App):
         CSS_PATH = "style.css"
+        BINDINGS = [
+            ("t", "cycle_themes", "Cycle Themes"),
+            ("q", "request_quit", "Quit")
+        ]
 
         status_message = reactive("Connecting to backend...")
 
@@ -61,9 +92,14 @@ class TextualWorkflowOutput(WorkflowOutput):
                 self.title = f"Workflow Viewer (Verify Only)"
             else:
                 self.title = "Workflow Viewer"
-            self.theme = "gruvbox"
+
             self.api_client = outer_instance.api_client
             self.selected_node_id = None
+            self.theme_cycle = cycle(BUILTIN_THEMES.keys())
+            self.theme = "gruvbox"
+            # Advance the cycle to the default theme
+            while next(self.theme_cycle) != self.theme:
+                pass
             self.tree_nodes = {}
             self.node_data = {}
             self.graph = nx.DiGraph()
@@ -128,6 +164,19 @@ class TextualWorkflowOutput(WorkflowOutput):
             """Called when the user quits the application."""
             self._shutdown_event.set()
             self.exit()
+
+        def action_request_quit(self) -> None:
+            """Action to display the quit dialog."""
+            self.push_screen(QuitScreen(), self.check_quit)
+
+        def check_quit(self, should_quit: bool) -> None:
+            """Called when the QuitScreen is dismissed."""
+            if should_quit:
+                self.action_quit()
+
+        def action_cycle_themes(self) -> None:
+            """An action to cycle themes."""
+            self.app.theme = next(self.theme_cycle)
 
         @work(thread=True)
         def initial_setup(self):

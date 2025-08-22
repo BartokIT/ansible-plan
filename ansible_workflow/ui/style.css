@@ -69,3 +69,29 @@ DataTable {
 RichLog {
     padding: 0;
 }
+
+/* Styles for the quit confirmation dialog */
+#quit_screen_container {
+    align: center middle;
+}
+
+#dialog {
+    width: 60;
+    height: 10;
+    border: thick $primary-lighten-2;
+    background: $surface;
+    padding: 1 2;
+    align: center middle;
+}
+
+#question {
+    width: 100%;
+    text-align: center;
+    margin-bottom: 1;
+}
+
+#buttons {
+    width: 100%;
+    align-horizontal: center;
+    margin-top: 1;
+}
