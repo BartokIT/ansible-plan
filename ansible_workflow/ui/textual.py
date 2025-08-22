@@ -13,7 +13,6 @@ from textual.widgets import Header, Footer, Static, Tree, RichLog, DataTable, Bu
 from textual.containers import Horizontal, Vertical
 from textual import work
 from textual.reactive import reactive
-from textual.themes import DEFAULT_THEMES
 from textual.css.query import NoMatches
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -63,7 +62,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 self.title = f"Workflow Viewer (Verify Only)"
             else:
                 self.title = "Workflow Viewer"
-            self.themes = list(DEFAULT_THEMES.keys())
+            self.themes = ["dark", "light", "gruvbox"]
             try:
                 self.theme_index = self.themes.index("gruvbox")
             except ValueError:
@@ -139,7 +138,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         def action_toggle_theme(self) -> None:
             """An action to toggle the theme."""
             self.theme_index = (self.theme_index + 1) % len(self.themes)
-            self.theme = self.themes[self.theme_index]
+            self.app.theme = self.themes[self.theme_index]
 
         @work(thread=True)
         def initial_setup(self):
