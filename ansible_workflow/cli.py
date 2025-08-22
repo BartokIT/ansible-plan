@@ -243,7 +243,16 @@ def main():
             cmd_args=cmd_args
         )
         output.run()
-        print("Workflow finished. Shutting down backend.")
+
+        try:
+            response = httpx.get(f"{BACKEND_URL}/workflow")
+            response.raise_for_status()
+            status = response.json().get("status")
+            if status == "running":
+                console.print("\nDetaching from workflow. The backend will continue to run.")
+                console.print("To re-attach, run the same command again.")
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            pass
     else:
         stdout_thread = StdoutWorkflowOutput(
             backend_url=BACKEND_URL,
