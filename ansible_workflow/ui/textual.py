@@ -13,6 +13,7 @@ from textual.widgets import Header, Footer, Static, Tree, RichLog, DataTable, Bu
 from textual.containers import Horizontal, Vertical
 from textual import work
 from textual.reactive import reactive
+from textual.themes import DEFAULT_THEMES
 from textual.css.query import NoMatches
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -50,6 +51,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
     class WorkflowApp(App):
         CSS_PATH = "style.css"
+        BINDINGS = [("t", "toggle_theme", "Toggle Theme")]
 
         status_message = reactive("Connecting to backend...")
 
@@ -61,7 +63,12 @@ class TextualWorkflowOutput(WorkflowOutput):
                 self.title = f"Workflow Viewer (Verify Only)"
             else:
                 self.title = "Workflow Viewer"
-            self.theme = "gruvbox"
+            self.themes = list(DEFAULT_THEMES.keys())
+            try:
+                self.theme_index = self.themes.index("gruvbox")
+            except ValueError:
+                self.theme_index = 0
+            self.theme = self.themes[self.theme_index]
             self.api_client = outer_instance.api_client
             self.selected_node_id = None
             self.tree_nodes = {}
@@ -128,6 +135,11 @@ class TextualWorkflowOutput(WorkflowOutput):
             """Called when the user quits the application."""
             self._shutdown_event.set()
             self.exit()
+
+        def action_toggle_theme(self) -> None:
+            """An action to toggle the theme."""
+            self.theme_index = (self.theme_index + 1) % len(self.themes)
+            self.theme = self.themes[self.theme_index]
 
         @work(thread=True)
         def initial_setup(self):
