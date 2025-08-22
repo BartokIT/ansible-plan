@@ -46,6 +46,12 @@ class StdoutWorkflowOutput(WorkflowOutput):
                     )
         self.__console.print(table)
         self.__console.print("")
+
+        if nodes and self.__interactive_retry:
+            for node in nodes:
+                if node['status'] == NodeStatus.FAILED.value:
+                    self.handle_retry(node)
+
         self.__console.print("[italic]Running[/] ...", justify="center")
 
     def draw_step(self):
