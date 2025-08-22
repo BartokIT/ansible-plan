@@ -181,4 +181,6 @@ class StdoutWorkflowOutput(WorkflowOutput):
         elif y_or_n == 's':
             self.api_client.skip_node(node['id'])
         elif y_or_n == 'n':
-            self.user_chose_to_quit = True
+            status_data = self.api_client.get_workflow_status()
+            if status_data.get('status') == 'failed':
+                self.user_chose_to_quit = True
