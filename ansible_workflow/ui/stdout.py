@@ -80,6 +80,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
         table.add_column("Node", justify="left", style="cyan", no_wrap=True)
         table.add_column("Playbook", style="bright_magenta")
         table.add_column("Ref.", style="cyan")
+        table.add_column("Started", style="green")
+        table.add_column("Ended", style="green")
         table.add_column("Status")
 
         if nodes:
@@ -89,6 +91,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
                         node['id'],
                         node.get('playbook', 'N/A'),
                         node.get('reference', 'N/A'),
+                        node.get('started', ''),
+                        node.get('ended', ''),
                         self._render_status(node['status'])
                     )
         self.__console.print(table)
@@ -110,12 +114,22 @@ class StdoutWorkflowOutput(WorkflowOutput):
             return 'unknown'
 
     def print_node_status_change(self, node):
+        status = node.get('status')
+        timestamp = ''
+        if status == NodeStatus.RUNNING.value:
+            timestamp = node.get('started', '')
+        elif status in [NodeStatus.ENDED.value, NodeStatus.FAILED.value, NodeStatus.SKIPPED.value]:
+            timestamp = node.get('ended', '')
+
+        if not timestamp:
+            timestamp = datetime.now().strftime('%H:%M:%S')
+
         table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
         table.add_column()
         table.add_column()
         status_text = self._render_status(node['status'])
         table.add_row(
-            datetime.now().strftime('%H:%M:%S'),
+            timestamp,
             f"Node [cyan]{node['id']}[/] is {status_text}"
         )
         self.__console.print(table)
