@@ -46,6 +46,30 @@ class QuitScreen(Screen):
             self.dismiss(False)
 
 
+class StopWorkflowScreen(Screen):
+    """Screen with a dialog to stop the workflow."""
+
+    def compose(self) -> ComposeResult:
+        yield Container(
+            Container(
+                Static("Are you sure you want to stop the workflow?", id="question"),
+                Horizontal(
+                    Button("Yes", variant="error", id="stop"),
+                    Button("No", variant="primary", id="cancel"),
+                    id="buttons",
+                ),
+                id="dialog",
+            ),
+            id="stop_workflow_screen_container"
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "stop":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
+
+
 class NullHighlighter(Highlighter):
     def highlight(self, text):
         pass
@@ -79,6 +103,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         CSS_PATH = "style.css"
         BINDINGS = [
             ("t", "cycle_themes", "Cycle Themes"),
+            ("x", "request_stop_workflow", "Stop Workflow"),
             ("q", "request_quit", "Quit")
         ]
 
@@ -169,10 +194,23 @@ class TextualWorkflowOutput(WorkflowOutput):
             """Action to display the quit dialog."""
             self.push_screen(QuitScreen(), self.check_quit)
 
+        def action_request_stop_workflow(self) -> None:
+            """Action to display the stop workflow dialog."""
+            self.push_screen(StopWorkflowScreen(), self.check_stop_workflow)
+
+        def action_stop_workflow(self) -> None:
+            """Action to stop the workflow."""
+            self.api_client.stop_workflow()
+
         def check_quit(self, should_quit: bool) -> None:
             """Called when the QuitScreen is dismissed."""
             if should_quit:
                 self.action_quit()
+
+        def check_stop_workflow(self, should_stop: bool) -> None:
+            """Called when the StopWorkflowScreen is dismissed."""
+            if should_stop:
+                self.action_stop_workflow()
 
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
