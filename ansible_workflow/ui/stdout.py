@@ -16,6 +16,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.__interactive_retry = cmd_args.interactive_retry
         self.__doubtful_mode = cmd_args.doubtful_mode
         self.known_nodes = {}
+        self.user_chose_to_quit = False
 
     def draw_init(self):
         self._logger.debug("Initializing stdout output")
@@ -175,3 +176,5 @@ class StdoutWorkflowOutput(WorkflowOutput):
             self.api_client.restart_node(node['id'])
         elif y_or_n == 's':
             self.api_client.skip_node(node['id'])
+        elif y_or_n == 'n':
+            self.user_chose_to_quit = True
