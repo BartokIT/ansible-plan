@@ -47,7 +47,9 @@ class WorkflowStartRequest(BaseModel):
 async def start_workflow(request: WorkflowStartRequest, background_tasks: BackgroundTasks):
     global current_workflow
     with workflow_lock:
-        if current_workflow and current_workflow.get_running_status() in [WorkflowStatus.RUNNING, WorkflowStatus.ENDED]:
+        if current_workflow and current_workflow.get_running_status() in [WorkflowStatus.RUNNING,
+                                                                           WorkflowStatus.ENDED,
+                                                                           WorkflowStatus.FAILED]:
             if current_workflow.get_workflow_file() == request.workflow_file:
                 return {"status": "reconnected"}
             else:
