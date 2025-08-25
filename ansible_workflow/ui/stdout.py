@@ -207,7 +207,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         with self.console_lock:
             self.__console.print("\n")
             self.__console.print("[bold yellow]Stop workflow requested.[/]")
-            self.__console.print("Choose stop mode: \\[g]raceful, \\[h]ard, or \\[c]ancel?")
+            self.__console.print("[bold yellow]Choose stop mode[/]: \\[g][dark_orange]raceful[/], \\[h][red]ard[/], or \\[c][cyan]ancel[/]?")
             choice = self.__console.input("> ")
             if choice.lower() == 'g':
                 self.api_client.stop_workflow(mode="graceful")
