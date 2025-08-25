@@ -45,6 +45,20 @@ class ApiClient:
         except (httpx.ConnectError, httpx.HTTPStatusError):
             pass
 
+    def pause_workflow(self):
+        try:
+            response = self.client.post("/workflow/pause")
+            response.raise_for_status()
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            pass
+
+    def resume_workflow(self):
+        try:
+            response = self.client.post("/workflow/resume")
+            response.raise_for_status()
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            pass
+
     def shutdown_backend(self):
         try:
             self.client.post("/shutdown")

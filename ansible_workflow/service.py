@@ -181,6 +181,24 @@ def stop_workflow(request: StopWorkflowRequest):
     return {"message": "Workflow stopping."}
 
 
+@app.post("/workflow/pause")
+def pause_workflow():
+    with workflow_lock:
+        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.RUNNING:
+            raise HTTPException(status_code=404, detail="No running workflow to pause.")
+        current_workflow.pause()
+    return {"message": "Workflow paused."}
+
+
+@app.post("/workflow/resume")
+def resume_workflow():
+    with workflow_lock:
+        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.RUNNING:
+            raise HTTPException(status_code=404, detail="No running workflow to resume.")
+        current_workflow.resume()
+    return {"message": "Workflow resumed."}
+
+
 @app.post("/workflow/node/{node_id}/restart")
 def restart_node(node_id: str):
     with workflow_lock:

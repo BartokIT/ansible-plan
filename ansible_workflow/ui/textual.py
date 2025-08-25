@@ -218,6 +218,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
         def action_request_stop_workflow(self) -> None:
             """Action to display the stop workflow dialog."""
+            self.api_client.pause_workflow()
             running_nodes = self.get_running_nodes()
             self.push_screen(StopWorkflowScreen(running_nodes=running_nodes), self.check_stop_workflow)
 
@@ -234,6 +235,8 @@ class TextualWorkflowOutput(WorkflowOutput):
             """Called when the StopWorkflowScreen is dismissed."""
             if stop_mode:
                 self.action_stop_workflow(stop_mode)
+            else:
+                self.api_client.resume_workflow()
 
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""

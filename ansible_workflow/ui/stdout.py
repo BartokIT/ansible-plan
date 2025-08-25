@@ -204,6 +204,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.stop_requested = True
 
     def _handle_stop_request(self):
+        self.api_client.pause_workflow()
         with self.console_lock:
             self.__console.print("\n")
             self.__console.print("[bold yellow]Stop workflow requested.[/]")
@@ -216,6 +217,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
                 self.api_client.stop_workflow(mode="hard")
                 self.__console.print("[red]Hard stop requested.[/]")
             else:
+                self.api_client.resume_workflow()
                 self.__console.print("[green]Stop request canceled.[/]")
         self.stop_requested = False
 
