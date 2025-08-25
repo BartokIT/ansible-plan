@@ -24,6 +24,7 @@ class NodeStatus(Enum):
     FAILED = 'failed'
     SKIPPED = 'skipped'
     NOT_STARTED = 'not_started'
+    STOPPED = 'stopped'
 
 
 class Node():
@@ -153,6 +154,8 @@ class PNode(Node):
             # print("Node %s status is %s - error is %s" % (self.get_id(), self.__runner.errored, self.__runner.status ))
             if self.__thread.is_alive():
                 return NodeStatus.RUNNING
+            elif self.is_canceled():
+                return NodeStatus.STOPPED
             elif self.is_failed():
                 return NodeStatus.FAILED
             else:
@@ -160,6 +163,9 @@ class PNode(Node):
 
     def get_type(self):
         return 'playbook'
+
+    def is_canceled(self):
+        return self.__runner.status == 'canceled'
 
     def is_failed(self):
         return self.__runner.status == 'failed'

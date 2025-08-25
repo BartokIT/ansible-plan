@@ -157,6 +157,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 NodeStatus.ENDED.value: "[green]✔[/green]",
                 NodeStatus.FAILED.value: "[red]✖[/red]",
                 NodeStatus.SKIPPED.value: "[cyan]»[/cyan]",
+                NodeStatus.STOPPED.value: "[red]■[/red]",
             }
             # This dictionary now only serves as a flag to indicate if a spinner worker
             # has been started for a node, to prevent duplicates.
