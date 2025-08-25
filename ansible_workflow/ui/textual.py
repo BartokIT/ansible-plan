@@ -49,17 +49,35 @@ class QuitScreen(Screen):
 class StopWorkflowScreen(Screen):
     """Screen with a dialog to stop the workflow."""
 
+    def __init__(self, running_nodes: list = None, **kwargs):
+        super().__init__(**kwargs)
+        self.running_nodes = running_nodes or []
+
     def compose(self) -> ComposeResult:
+        dialog_children = [
+            Static("Are you sure you want to stop the workflow?", id="question")
+        ]
+
+        if self.running_nodes:
+            table = DataTable(id="running_nodes_table")
+            table.add_column("Running Nodes")
+            for node in self.running_nodes:
+                table.add_row(node)
+            dialog_children.extend([
+                Static("\nThe following nodes are currently running:"),
+                table
+            ])
+
+        dialog_children.append(
+            Horizontal(
+                Button("Yes", variant="error", id="stop"),
+                Button("No", variant="primary", id="cancel"),
+                id="buttons",
+            )
+        )
+
         yield Container(
-            Container(
-                Static("Are you sure you want to stop the workflow?", id="question"),
-                Horizontal(
-                    Button("Yes", variant="error", id="stop"),
-                    Button("No", variant="primary", id="cancel"),
-                    id="buttons",
-                ),
-                id="dialog",
-            ),
+            Vertical(*dialog_children, id="dialog"),
             id="stop_workflow_screen_container"
         )
 
@@ -196,7 +214,8 @@ class TextualWorkflowOutput(WorkflowOutput):
 
         def action_request_stop_workflow(self) -> None:
             """Action to display the stop workflow dialog."""
-            self.push_screen(StopWorkflowScreen(), self.check_stop_workflow)
+            running_nodes = self.get_running_nodes()
+            self.push_screen(StopWorkflowScreen(running_nodes=running_nodes), self.check_stop_workflow)
 
         def action_stop_workflow(self) -> None:
             """Action to stop the workflow."""
@@ -215,6 +234,13 @@ class TextualWorkflowOutput(WorkflowOutput):
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
             self.app.theme = next(self.theme_cycle)
+
+        def get_running_nodes(self):
+            running_nodes = []
+            for node_id, node_data in self.node_data.items():
+                if node_data.get('status') == NodeStatus.RUNNING.value:
+                    running_nodes.append(node_id)
+            return running_nodes
 
         @work(thread=True)
         def initial_setup(self):
