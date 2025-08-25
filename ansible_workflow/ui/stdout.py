@@ -210,6 +210,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
             self.__console.print("[bold yellow]Stop workflow requested.[/]")
             self.__console.print("[bold yellow]Choose stop mode[/]: \\[g][dark_orange]raceful[/], \\[h][red]ard[/], or \\[c][cyan]ancel[/]?")
             choice = self.__console.input("> ")
+            self._logger.info(f"User chose: {choice}")
             if choice.lower() == 'g':
                 self.api_client.stop_workflow(mode="graceful")
                 self.__console.print("[yellow]Graceful stop requested.[/]")

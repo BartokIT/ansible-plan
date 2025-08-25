@@ -13,7 +13,7 @@ class WorkflowOutput(threading.Thread):
     def __init__(self, backend_url, event, logging_dir, log_level, cmd_args):
         threading.Thread.__init__(self)
         self._define_logger(logging_dir, log_level)
-        self.api_client = ApiClient(backend_url)
+        self.api_client = ApiClient(backend_url, logger=self._logger)
         self._refresh_interval = 2
         self.__verify_only = cmd_args.verify_only
         self.__interactive_retry = cmd_args.interactive_retry
