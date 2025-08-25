@@ -2,7 +2,7 @@ import time
 import threading
 from datetime import datetime
 from rich.console import Console
-import keyboard
+from pynput import keyboard
 from rich.table import Table
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -22,6 +22,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.declined_retry_nodes = set()
         self.console_lock = threading.Lock()
         self.stop_requested = False
+        self.ctrl_pressed = False
 
     def draw_init(self):
         self._logger.debug("Initializing stdout output")
@@ -217,7 +218,25 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.stop_requested = False
 
     def run(self):
-        keyboard.add_hotkey('ctrl+x', self._request_stop)
+        def on_press(key):
+            try:
+                if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
+                    self.ctrl_pressed = True
+            except AttributeError:
+                pass
+
+        def on_release(key):
+            try:
+                if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
+                    self.ctrl_pressed = False
+                if self.ctrl_pressed and key.char == 'x':
+                    self._request_stop()
+            except AttributeError:
+                pass
+
+        listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+        listener.start()
+
         self._logger.info("WorkflowOutput run")
         self.draw_init()
 
@@ -246,3 +265,5 @@ class StdoutWorkflowOutput(WorkflowOutput):
         if not self.event.is_set():
             self._logger.info(f"Final status: {status}. Exiting loop.")
             self.draw_end(status_data=status_data)
+
+        listener.stop()
