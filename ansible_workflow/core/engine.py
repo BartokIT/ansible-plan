@@ -28,7 +28,8 @@ class AnsibleWorkflow():
         self.__workflow_file = workflow_file
         self.__resume_event = threading.Event()
         self._validation_errors = []
-        self.__paused = False
+        self.__pause_event = threading.Event()
+        self.__pause_event.set()
 
     def get_validation_errors(self):
         return self._validation_errors
@@ -215,11 +216,11 @@ class AnsibleWorkflow():
 
     def pause(self):
         self._logger.info("Pausing workflow")
-        self.__paused = True
+        self.__pause_event.clear()
 
     def resume(self):
         self._logger.info("Resuming workflow")
-        self.__paused = False
+        self.__pause_event.set()
 
     def get_some_failed_task(self):
         some_failed_tasks = False
@@ -248,7 +249,7 @@ class AnsibleWorkflow():
 
                     # check if a node as previous nodes ended and not already started
                     if self.is_node_runnable(next_node_id) and next_node_id not in self.__running_nodes:
-                        if next_node_id != end_node and not self.__stopped and not self.__paused:
+                        if next_node_id != end_node and not self.__stopped:
                             self.__running_nodes.append(next_node_id)
                             if isinstance(next_node, PNode):
                                 # run a node
@@ -370,6 +371,7 @@ class AnsibleWorkflow():
 
         # loop over nodes
         while not self.__stopped:
+            self.__pause_event.wait()
             self.__run_step(end_node)
 
             if not self.is_running():
