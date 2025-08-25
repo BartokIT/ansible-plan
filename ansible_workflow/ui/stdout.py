@@ -1,6 +1,8 @@
 import time
+import threading
 from datetime import datetime
 from rich.console import Console
+import keyboard
 from rich.table import Table
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -18,11 +20,14 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.known_nodes = {}
         self.user_chose_to_quit = False
         self.declined_retry_nodes = set()
+        self.console_lock = threading.Lock()
+        self.stop_requested = False
 
     def draw_init(self):
         self._logger.debug("Initializing stdout output")
         if self.is_verify_only():
             self.__console.print("[bold yellow]Running in VERIFY ONLY mode[/]", justify="center")
+        self.__console.print("\n[bold cyan]Press Ctrl+X to stop the workflow.[/]\n", justify="center")
         self.__console.print("[italic]Waiting for workflow to start...[/]", justify="center")
 
         nodes = self.api_client.get_all_nodes()
@@ -191,3 +196,53 @@ class StdoutWorkflowOutput(WorkflowOutput):
             self.api_client.skip_node(node['id'])
         elif y_or_n == 'n':
             self.declined_retry_nodes.add(node['id'])
+
+    def _request_stop(self):
+        self.stop_requested = True
+
+    def _handle_stop_request(self):
+        with self.console_lock:
+            self.__console.print("\n")
+            self.__console.print("[bold yellow]Stop workflow requested.[/]")
+            self.__console.print("Choose stop mode: [g]raceful, [h]ard, or [c]ancel?")
+            choice = self.__console.input("> ")
+            if choice.lower() == 'g':
+                self.api_client.stop_workflow(mode="graceful")
+                self.__console.print("[yellow]Graceful stop requested.[/]")
+            elif choice.lower() == 'h':
+                self.api_client.stop_workflow(mode="hard")
+                self.__console.print("[red]Hard stop requested.[/]")
+            else:
+                self.__console.print("[green]Stop request canceled.[/]")
+        self.stop_requested = False
+
+    def run(self):
+        keyboard.add_hotkey('ctrl+x', self._request_stop)
+        self._logger.info("WorkflowOutput run")
+        self.draw_init()
+
+        status_data = None
+        while not self.event.is_set():
+            if self.stop_requested:
+                self._handle_stop_request()
+
+            status_data = self.api_client.get_workflow_status()
+            status = status_data.get('status') if status_data else None
+            self._logger.info(f"Checking status: {status}")
+
+            if status == "ended":
+                break
+
+            if status == "failed" and not self._WorkflowOutput__interactive_retry:
+                break
+
+            self.draw_step()
+
+            if hasattr(self, 'user_chose_to_quit') and self.user_chose_to_quit:
+                break
+
+            self.draw_pause()
+
+        if not self.event.is_set():
+            self._logger.info(f"Final status: {status}. Exiting loop.")
+            self.draw_end(status_data=status_data)
