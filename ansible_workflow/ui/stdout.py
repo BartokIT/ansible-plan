@@ -2,7 +2,10 @@ import time
 import threading
 from datetime import datetime
 from rich.console import Console
-from pynput import keyboard
+import sys
+import select
+import tty
+import termios
 from rich.table import Table
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -22,7 +25,6 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.declined_retry_nodes = set()
         self.console_lock = threading.Lock()
         self.stop_requested = False
-        self.ctrl_pressed = False
 
     def draw_init(self):
         self._logger.debug("Initializing stdout output")
@@ -218,52 +220,43 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.stop_requested = False
 
     def run(self):
-        def on_press(key):
-            try:
-                if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
-                    self.ctrl_pressed = True
-            except AttributeError:
-                pass
-
-        def on_release(key):
-            try:
-                if key == keyboard.Key.ctrl_l or key == keyboard.Key.ctrl_r:
-                    self.ctrl_pressed = False
-                if self.ctrl_pressed and key.char == 'x':
-                    self._request_stop()
-            except AttributeError:
-                pass
-
-        listener = keyboard.Listener(on_press=on_press, on_release=on_release)
-        listener.start()
-
         self._logger.info("WorkflowOutput run")
         self.draw_init()
 
-        status_data = None
-        while not self.event.is_set():
-            if self.stop_requested:
-                self._handle_stop_request()
+        old_settings = termios.tcgetattr(sys.stdin)
+        try:
+            tty.setcbreak(sys.stdin.fileno())
 
-            status_data = self.api_client.get_workflow_status()
-            status = status_data.get('status') if status_data else None
-            self._logger.info(f"Checking status: {status}")
+            status_data = None
+            while not self.event.is_set():
+                if select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
+                    c = sys.stdin.read(1)
+                    if c == '\x18': # Ctrl+X
+                        self._request_stop()
 
-            if status == "ended":
-                break
+                if self.stop_requested:
+                    self._handle_stop_request()
 
-            if status == "failed" and not self._WorkflowOutput__interactive_retry:
-                break
+                status_data = self.api_client.get_workflow_status()
+                status = status_data.get('status') if status_data else None
+                self._logger.info(f"Checking status: {status}")
 
-            self.draw_step()
+                if status == "ended":
+                    break
 
-            if hasattr(self, 'user_chose_to_quit') and self.user_chose_to_quit:
-                break
+                if status == "failed" and not self._WorkflowOutput__interactive_retry:
+                    break
 
-            self.draw_pause()
+                self.draw_step()
+
+                if hasattr(self, 'user_chose_to_quit') and self.user_chose_to_quit:
+                    break
+
+                self.draw_pause()
+        finally:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
 
         if not self.event.is_set():
             self._logger.info(f"Final status: {status}. Exiting loop.")
             self.draw_end(status_data=status_data)
-
-        listener.stop()
