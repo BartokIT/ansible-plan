@@ -203,8 +203,14 @@ class AnsibleWorkflow():
     def is_stopping(self):
         return self.__stopped
 
-    def stop(self):
+    def stop(self, mode: str = 'graceful'):
         self.__stopped = True
+        if mode == 'hard':
+            self._logger.info("Hard stop requested")
+            for node_id in self.get_running_nodes():
+                node = self.get_node_object(node_id)
+                if isinstance(node, PNode):
+                    node.stop()
 
     def get_some_failed_task(self):
         some_failed_tasks = False

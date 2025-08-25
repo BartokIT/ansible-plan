@@ -38,9 +38,9 @@ class ApiClient:
         except (httpx.ConnectError, httpx.HTTPStatusError):
             return None
 
-    def stop_workflow(self):
+    def stop_workflow(self, mode: str = "graceful"):
         try:
-            response = self.client.post("/workflow/stop")
+            response = self.client.post("/workflow/stop", json={"mode": mode})
             response.raise_for_status()
         except (httpx.ConnectError, httpx.HTTPStatusError):
             pass

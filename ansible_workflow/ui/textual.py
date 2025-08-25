@@ -70,7 +70,8 @@ class StopWorkflowScreen(Screen):
 
         dialog_children.append(
             Horizontal(
-                Button("Yes", variant="error", id="stop"),
+                Button("Graceful Stop", variant="primary", id="graceful_stop"),
+                Button("Hard Stop", variant="error", id="hard_stop"),
                 Button("No", variant="primary", id="cancel"),
                 id="buttons",
             )
@@ -82,10 +83,12 @@ class StopWorkflowScreen(Screen):
         )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "stop":
-            self.dismiss(True)
+        if event.button.id == "graceful_stop":
+            self.dismiss("graceful")
+        elif event.button.id == "hard_stop":
+            self.dismiss("hard")
         else:
-            self.dismiss(False)
+            self.dismiss(None)
 
 
 class NullHighlighter(Highlighter):
@@ -217,19 +220,19 @@ class TextualWorkflowOutput(WorkflowOutput):
             running_nodes = self.get_running_nodes()
             self.push_screen(StopWorkflowScreen(running_nodes=running_nodes), self.check_stop_workflow)
 
-        def action_stop_workflow(self) -> None:
+        def action_stop_workflow(self, mode: str) -> None:
             """Action to stop the workflow."""
-            self.api_client.stop_workflow()
+            self.api_client.stop_workflow(mode)
 
         def check_quit(self, should_quit: bool) -> None:
             """Called when the QuitScreen is dismissed."""
             if should_quit:
                 self.action_quit()
 
-        def check_stop_workflow(self, should_stop: bool) -> None:
+        def check_stop_workflow(self, stop_mode: str) -> None:
             """Called when the StopWorkflowScreen is dismissed."""
-            if should_stop:
-                self.action_stop_workflow()
+            if stop_mode:
+                self.action_stop_workflow(stop_mode)
 
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""

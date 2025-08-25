@@ -109,6 +109,7 @@ class PNode(Node):
         self.__verbosity = verbosity
         self.__description = description
         self.__reference = reference
+        self.__hard_stop = False
 
     def check_node_input(self):
         # convert project path in absolute path
@@ -171,6 +172,13 @@ class PNode(Node):
     def get_reference(self):
         return self.__reference
 
+    def stop(self):
+        self._logger.info("Stopping node %s" % self.get_id())
+        self.__hard_stop = True
+
+    def _cancel_callback(self):
+        return self.__hard_stop
+
     def reset_status(self):
         self.__thread = None
         self.__runner = None
@@ -216,6 +224,7 @@ class PNode(Node):
                                                                 settings={
                                                                     'suppress_ansible_output': True
                                                                 },
+                                                                cancel_callback=self._cancel_callback,
                                                                 # vault_ids=self.__vault_ids,
                                                                 cmdline=playbook_cmd_line,
                                                                 extravars=self.__extravars,
