@@ -207,19 +207,15 @@ class AnsibleWorkflow():
         return self.__stopped
 
     def stop(self, mode: str = 'graceful'):
+        self._logger.info(f"Stop requested with mode: {mode}")
         self.__stopping = True
+        self.__running_status = WorkflowStatus.STOPPING
+        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, f"Workflow stopping ({mode})")
         if mode == 'hard':
-            self._logger.info("Hard stop requested")
-            self.__stopped = True
             for node_id in self.get_running_nodes():
                 node = self.get_node_object(node_id)
                 if isinstance(node, PNode):
                     node.stop()
-            self.__running_status = WorkflowStatus.FAILED
-            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow stopped")
-        else:
-            self.__running_status = WorkflowStatus.STOPPING
-            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow stopping gracefully")
 
     def pause(self):
         self._logger.info("Pausing workflow")
@@ -241,10 +237,14 @@ class AnsibleWorkflow():
         return some_failed_tasks
 
     def __run_step(self, end_node="_e"):
+        self._logger.debug(f"__run_step: running_nodes={self.__running_nodes}")
         for node_id in list(self.__running_nodes):
             node = self.get_node_object(node_id)
+            status = node.get_status()
+            self._logger.debug(f"__run_step: processing node {node_id} with status {status}")
             # if current node is ended search for next nodes
-            if node.get_status() in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
+            if status in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
+                self._logger.info(f"Node {node_id} finished with status {status}. Setting end time.")
                 self.__running_nodes.remove(node_id)
                 if not node.is_skipped():
                     node.set_ended_time(datetime.now())
@@ -267,11 +267,12 @@ class AnsibleWorkflow():
                                     self.skip_node(next_node_id)
 
 
-            elif node.get_status() == NodeStatus.STOPPED:
+            elif status == NodeStatus.STOPPED:
+                self._logger.info(f"Node {node_id} stopped. Setting end time.")
                 node.set_ended_time(datetime.now())
                 self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.STOPPED, node)
                 self.__running_nodes.remove(node_id)
-            elif node.get_status() == NodeStatus.FAILED:
+            elif status == NodeStatus.FAILED:
                 # just remove a failed node
                 # print("Failed node %s" % node_id)
                 node.set_ended_time(datetime.now())
