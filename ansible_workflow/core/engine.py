@@ -267,6 +267,10 @@ class AnsibleWorkflow():
                                     self.skip_node(next_node_id)
 
 
+            elif node.get_status() == NodeStatus.STOPPED:
+                node.set_ended_time(datetime.now())
+                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.STOPPED, node)
+                self.__running_nodes.remove(node_id)
             elif node.get_status() == NodeStatus.FAILED:
                 # just remove a failed node
                 # print("Failed node %s" % node_id)
@@ -382,6 +386,8 @@ class AnsibleWorkflow():
             self.__run_step(end_node)
 
             if not self.is_running():
+                if self.__stopping:
+                    break
                 if self.get_some_failed_task():
                     # There are failed tasks, set status and wait for user to retry
                     self.__running_status = WorkflowStatus.FAILED
