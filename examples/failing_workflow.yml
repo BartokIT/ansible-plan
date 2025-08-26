@@ -12,7 +12,7 @@ workflow:
       - id: shutdown-linux
         import_playbook: playbooks/failing_play.yml
         description: This task aims to shutdown all physical servers
-        reference: TA_LINUX
+        reference: TEAM LINUX
 
       - id: shutdown-oracle
         import_playbook: playbooks/failing_play.yml
@@ -22,7 +22,7 @@ workflow:
           - test
           - test
           bla bla bla.
-        reference: TA_ORACLE
+        reference: TEAM ORACLE
 
       - id: block_svc
         strategy: serial
@@ -31,7 +31,7 @@ workflow:
           - id: other_stuff_1
             import_playbook: playbooks/failing_play.yml
             description: other stuff
-            reference: TA_IAM
+            reference: FIRST LEVEL SUPPORT
 
           - id: other_stuff_2
             import_playbook: playbooks/failing_play.yml
@@ -41,7 +41,7 @@ workflow:
               - test
               - test
               bla bla bla.
-            reference: TA_JBOSS
+            reference: TEAM IAM
 
   - id: block_services
     strategy: parallel
