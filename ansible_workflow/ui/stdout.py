@@ -138,6 +138,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
             return '[white]not started[/]'
         elif status == NodeStatus.SKIPPED.value:
             return '[cyan]skipped[/]'
+        elif status == NodeStatus.STOPPED.value:
+            return '[red]stopped[/]'
         else:
             return 'unknown'
 
@@ -146,7 +148,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         timestamp = ''
         if status == NodeStatus.RUNNING.value:
             timestamp = node.get('started', '')
-        elif status in [NodeStatus.ENDED.value, NodeStatus.FAILED.value, NodeStatus.SKIPPED.value]:
+        elif status in [NodeStatus.ENDED.value, NodeStatus.FAILED.value, NodeStatus.SKIPPED.value, NodeStatus.STOPPED.value]:
             timestamp = node.get('ended', '')
 
         if not timestamp:
