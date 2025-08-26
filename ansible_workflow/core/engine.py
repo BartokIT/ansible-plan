@@ -216,6 +216,7 @@ class AnsibleWorkflow():
                 node = self.get_node_object(node_id)
                 if isinstance(node, PNode):
                     node.stop()
+        self.__pause_event.set()
 
     def pause(self):
         self._logger.info("Pausing workflow")
