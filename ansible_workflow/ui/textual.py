@@ -12,7 +12,7 @@ from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Tree, RichLog, DataTable, Button
 from textual.containers import Horizontal, Vertical, Container
-from textual.screen import Screen
+from textual.screen import Screen, ModalScreen
 from textual import work
 from textual.reactive import reactive
 from textual.theme import BUILTIN_THEMES
@@ -22,21 +22,18 @@ from ..core.models import NodeStatus
 from .api_client import ApiClient
 
 
-class QuitScreen(Screen):
+class QuitScreen(ModalScreen):
     """Screen with a dialog to quit."""
 
     def compose(self) -> ComposeResult:
         yield Container(
-            Container(
-                Static("Are you sure you want to quit?", id="question"),
-                Horizontal(
-                    Button("Yes", variant="error", id="quit"),
-                    Button("No", variant="primary", id="cancel"),
-                    id="buttons",
-                ),
-                id="dialog",
+            Static("Are you sure you want to quit?", id="question"),
+            Horizontal(
+                Button("Yes", variant="error", id="quit"),
+                Button("No", variant="primary", id="cancel"),
+                id="buttons",
             ),
-            id="quit_screen_container"
+            id="dialog",
         )
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -46,7 +43,7 @@ class QuitScreen(Screen):
             self.dismiss(False)
 
 
-class StopWorkflowScreen(Screen):
+class StopWorkflowScreen(ModalScreen):
     """Screen with a dialog to stop the workflow."""
 
     def __init__(self, running_nodes: list = None, **kwargs):
@@ -77,10 +74,7 @@ class StopWorkflowScreen(Screen):
             )
         )
 
-        yield Container(
-            Vertical(*dialog_children, id="dialog"),
-            id="stop_workflow_screen_container"
-        )
+        yield Vertical(*dialog_children, id="dialog")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "graceful_stop":
