@@ -30,6 +30,7 @@ class AnsibleWorkflow():
         self._validation_errors = []
         self.__pause_event = threading.Event()
         self.__pause_event.set()
+        self.__stopping = False
 
     def get_validation_errors(self):
         return self._validation_errors
@@ -206,15 +207,16 @@ class AnsibleWorkflow():
         return self.__stopped
 
     def stop(self, mode: str = 'graceful'):
-        self.__stopped = True
+        self.__stopping = True
         if mode == 'hard':
             self._logger.info("Hard stop requested")
+            self.__stopped = True
             for node_id in self.get_running_nodes():
                 node = self.get_node_object(node_id)
                 if isinstance(node, PNode):
                     node.stop()
-        self.__running_status = WorkflowStatus.FAILED
-        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow stopped")
+            self.__running_status = WorkflowStatus.FAILED
+            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow stopped")
 
     def pause(self):
         self._logger.info("Pausing workflow")
@@ -251,7 +253,7 @@ class AnsibleWorkflow():
 
                     # check if a node as previous nodes ended and not already started
                     if self.is_node_runnable(next_node_id) and next_node_id not in self.__running_nodes:
-                        if next_node_id != end_node and not self.__stopped:
+                        if next_node_id != end_node and not self.__stopping:
                             self.__running_nodes.append(next_node_id)
                             if isinstance(next_node, PNode):
                                 # run a node
@@ -391,6 +393,6 @@ class AnsibleWorkflow():
 
             time.sleep(0.2)
 
-        if self.__stopped and self.__running_status != WorkflowStatus.ENDED:
+        if self.__stopping and self.__running_status != WorkflowStatus.ENDED:
             self.__running_status = WorkflowStatus.FAILED
             self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow stopped")
