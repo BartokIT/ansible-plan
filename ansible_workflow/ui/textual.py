@@ -10,7 +10,7 @@ with warnings.catch_warnings():
 from rich.highlighter import Highlighter
 from rich.text import Text
 from textual.app import App, ComposeResult
-from textual.widgets import Header, Footer, Static, Tree, RichLog, DataTable, Button
+from textual.widgets import Header, Footer, Static, Tree, RichLog, DataTable, Button, Label
 from textual.containers import Horizontal, Vertical, Container
 from textual.screen import Screen, ModalScreen
 from textual import work
@@ -27,7 +27,7 @@ class QuitScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         yield Container(
-            Static("Are you sure you want to quit?", id="question"),
+            Label("Are you sure you want to quit?", id="question"),
             Horizontal(
                 Button("Yes", variant="error", id="quit"),
                 Button("No", variant="primary", id="cancel"),
@@ -52,7 +52,7 @@ class StopWorkflowScreen(ModalScreen):
 
     def compose(self) -> ComposeResult:
         dialog_children = [
-            Static("Are you sure you want to stop the workflow?", id="question")
+            Label("Are you sure you want to stop the workflow?", id="question")
         ]
 
         if self.running_nodes:
@@ -61,7 +61,7 @@ class StopWorkflowScreen(ModalScreen):
             for node in self.running_nodes:
                 table.add_row(node)
             dialog_children.extend([
-                Static("\nThe following nodes are currently running:"),
+                Label("\nThe following nodes are currently running:"),
                 table
             ])
 
