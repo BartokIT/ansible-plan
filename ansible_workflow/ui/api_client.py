@@ -1,10 +1,12 @@
 import httpx
+import logging
 from typing import List, Dict, Any, Optional
 
 class ApiClient:
-    def __init__(self, base_url: str):
+    def __init__(self, base_url: str, logger=None):
         self.base_url = base_url
         self.client = httpx.Client(base_url=self.base_url)
+        self.logger = logger or logging.getLogger(__name__)
 
     def get_workflow_status(self) -> Optional[Dict[str, Any]]:
         try:
@@ -38,11 +40,29 @@ class ApiClient:
         except (httpx.ConnectError, httpx.HTTPStatusError):
             return None
 
-    def stop_workflow(self):
+    def stop_workflow(self, mode: str = "graceful"):
         try:
-            response = self.client.post("/workflow/stop")
+            response = self.client.post("/workflow/stop", json={"mode": mode})
             response.raise_for_status()
         except (httpx.ConnectError, httpx.HTTPStatusError):
+            pass
+
+    def pause_workflow(self):
+        self.logger.info("Pausing workflow via API")
+        try:
+            response = self.client.post("/workflow/pause")
+            response.raise_for_status()
+        except (httpx.ConnectError, httpx.HTTPStatusError) as e:
+            self.logger.error(f"Failed to pause workflow: {e}")
+            pass
+
+    def resume_workflow(self):
+        self.logger.info("Resuming workflow via API")
+        try:
+            response = self.client.post("/workflow/resume")
+            response.raise_for_status()
+        except (httpx.ConnectError, httpx.HTTPStatusError) as e:
+            self.logger.error(f"Failed to resume workflow: {e}")
             pass
 
     def shutdown_backend(self):

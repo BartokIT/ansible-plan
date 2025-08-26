@@ -1,6 +1,11 @@
 import time
+import threading
 from datetime import datetime
 from rich.console import Console
+import sys
+import select
+import tty
+import termios
 from rich.table import Table
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -18,11 +23,14 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.known_nodes = {}
         self.user_chose_to_quit = False
         self.declined_retry_nodes = set()
+        self.console_lock = threading.Lock()
+        self.stop_requested = False
 
     def draw_init(self):
         self._logger.debug("Initializing stdout output")
         if self.is_verify_only():
             self.__console.print("[bold yellow]Running in VERIFY ONLY mode[/]", justify="center")
+        self.__console.print("\n[bold cyan]Press Ctrl+X to stop the workflow.[/]\n", justify="center")
         self.__console.print("[italic]Waiting for workflow to start...[/]", justify="center")
 
         nodes = self.api_client.get_all_nodes()
@@ -130,6 +138,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
             return '[white]not started[/]'
         elif status == NodeStatus.SKIPPED.value:
             return '[cyan]skipped[/]'
+        elif status == NodeStatus.STOPPED.value:
+            return '[red]stopped[/]'
         else:
             return 'unknown'
 
@@ -138,7 +148,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         timestamp = ''
         if status == NodeStatus.RUNNING.value:
             timestamp = node.get('started', '')
-        elif status in [NodeStatus.ENDED.value, NodeStatus.FAILED.value, NodeStatus.SKIPPED.value]:
+        elif status in [NodeStatus.ENDED.value, NodeStatus.FAILED.value, NodeStatus.SKIPPED.value, NodeStatus.STOPPED.value]:
             timestamp = node.get('ended', '')
 
         if not timestamp:
@@ -191,3 +201,67 @@ class StdoutWorkflowOutput(WorkflowOutput):
             self.api_client.skip_node(node['id'])
         elif y_or_n == 'n':
             self.declined_retry_nodes.add(node['id'])
+
+    def _request_stop(self):
+        self.stop_requested = True
+
+    def _handle_stop_request(self):
+        self.api_client.pause_workflow()
+        with self.console_lock:
+            self.__console.print("\n")
+            self.__console.print("[bold yellow]Stop workflow requested.[/]")
+            self.__console.print("[bold yellow]Choose stop mode[/]: \\[g][dark_orange]raceful[/], \\[h][red]ard[/], or \\[c][cyan]ancel[/]?")
+            choice = self.__console.input("> ")
+            self._logger.info(f"User chose: {choice}")
+            if choice.lower() == 'g':
+                self.api_client.stop_workflow(mode="graceful")
+                self.__console.print("[yellow]Graceful stop requested.[/]")
+            elif choice.lower() == 'h':
+                self.api_client.stop_workflow(mode="hard")
+                self.__console.print("[red]Hard stop requested.[/]")
+            else:
+                self.api_client.resume_workflow()
+                self.__console.print("[green]Stop request canceled.[/]")
+        self.stop_requested = False
+
+    def run(self):
+        self._logger.info("WorkflowOutput run")
+        self.draw_init()
+
+        old_settings = termios.tcgetattr(sys.stdin)
+        try:
+            tty.setcbreak(sys.stdin.fileno())
+
+            status_data = None
+            while not self.event.is_set():
+                if select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
+                    c = sys.stdin.read(1)
+                    if c == '\x18': # Ctrl+X
+                        self._request_stop()
+
+                if self.stop_requested:
+                    self._handle_stop_request()
+
+                status_data = self.api_client.get_workflow_status()
+                status = status_data.get('status') if status_data else None
+                self._logger.info(f"Checking status: {status}")
+
+                if status == "ended":
+                    break
+
+                if status == "failed" and not self._WorkflowOutput__interactive_retry:
+                    break
+
+                self.draw_step()
+
+                if hasattr(self, 'user_chose_to_quit') and self.user_chose_to_quit:
+                    break
+
+                self.draw_pause()
+        finally:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+
+
+        if not self.event.is_set():
+            self._logger.info(f"Final status: {status}. Exiting loop.")
+            self.draw_end(status_data=status_data)

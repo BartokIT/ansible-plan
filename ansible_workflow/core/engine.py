@@ -28,6 +28,9 @@ class AnsibleWorkflow():
         self.__workflow_file = workflow_file
         self.__resume_event = threading.Event()
         self._validation_errors = []
+        self.__pause_event = threading.Event()
+        self.__pause_event.set()
+        self.__stopping = False
 
     def get_validation_errors(self):
         return self._validation_errors
@@ -203,8 +206,25 @@ class AnsibleWorkflow():
     def is_stopping(self):
         return self.__stopped
 
-    def stop(self):
-        self.__stopped = True
+    def stop(self, mode: str = 'graceful'):
+        self._logger.info(f"Stop requested with mode: {mode}")
+        self.__stopping = True
+        self.__running_status = WorkflowStatus.STOPPING
+        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, f"Workflow stopping ({mode})")
+        if mode == 'hard':
+            for node_id in self.get_running_nodes():
+                node = self.get_node_object(node_id)
+                if isinstance(node, PNode):
+                    node.stop()
+        self.__pause_event.set()
+
+    def pause(self):
+        self._logger.info("Pausing workflow")
+        self.__pause_event.clear()
+
+    def resume(self):
+        self._logger.info("Resuming workflow")
+        self.__pause_event.set()
 
     def get_some_failed_task(self):
         some_failed_tasks = False
@@ -218,10 +238,14 @@ class AnsibleWorkflow():
         return some_failed_tasks
 
     def __run_step(self, end_node="_e"):
+        self._logger.debug(f"__run_step: running_nodes={self.__running_nodes}")
         for node_id in list(self.__running_nodes):
             node = self.get_node_object(node_id)
+            status = node.get_status()
+            self._logger.debug(f"__run_step: processing node {node_id} with status {status}")
             # if current node is ended search for next nodes
-            if node.get_status() in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
+            if status in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
+                self._logger.info(f"Node {node_id} finished with status {status}. Setting end time.")
                 self.__running_nodes.remove(node_id)
                 if not node.is_skipped():
                     node.set_ended_time(datetime.now())
@@ -233,7 +257,7 @@ class AnsibleWorkflow():
 
                     # check if a node as previous nodes ended and not already started
                     if self.is_node_runnable(next_node_id) and next_node_id not in self.__running_nodes:
-                        if next_node_id != end_node and not self.__stopped:
+                        if next_node_id != end_node and not self.__stopping:
                             self.__running_nodes.append(next_node_id)
                             if isinstance(next_node, PNode):
                                 # run a node
@@ -244,7 +268,12 @@ class AnsibleWorkflow():
                                     self.skip_node(next_node_id)
 
 
-            elif node.get_status() == NodeStatus.FAILED:
+            elif status == NodeStatus.STOPPED:
+                self._logger.info(f"Node {node_id} stopped. Setting end time.")
+                node.set_ended_time(datetime.now())
+                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.STOPPED, node)
+                self.__running_nodes.remove(node_id)
+            elif status == NodeStatus.FAILED:
                 # just remove a failed node
                 # print("Failed node %s" % node_id)
                 node.set_ended_time(datetime.now())
@@ -355,9 +384,12 @@ class AnsibleWorkflow():
 
         # loop over nodes
         while not self.__stopped:
+            self.__pause_event.wait()
             self.__run_step(end_node)
 
             if not self.is_running():
+                if self.__stopping:
+                    break
                 if self.get_some_failed_task():
                     # There are failed tasks, set status and wait for user to retry
                     self.__running_status = WorkflowStatus.FAILED
@@ -372,6 +404,6 @@ class AnsibleWorkflow():
 
             time.sleep(0.2)
 
-        if self.__stopped and self.__running_status != WorkflowStatus.ENDED:
+        if self.__stopping and self.__running_status != WorkflowStatus.ENDED:
             self.__running_status = WorkflowStatus.FAILED
             self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow stopped")

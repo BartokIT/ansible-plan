@@ -9,6 +9,9 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List
 
+class StopWorkflowRequest(BaseModel):
+    mode: str = "graceful"
+
 from .core.loader import WorkflowYamlLoader
 from .core.engine import AnsibleWorkflow
 from .core.models import NodeStatus, WorkflowStatus, PNode
@@ -170,12 +173,30 @@ def get_node_stdout(node_id: str):
 
 
 @app.post("/workflow/stop")
-def stop_workflow():
+def stop_workflow(request: StopWorkflowRequest):
     with workflow_lock:
         if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.RUNNING:
             raise HTTPException(status_code=404, detail="No running workflow to stop.")
-        current_workflow.stop()
+        current_workflow.stop(request.mode)
     return {"message": "Workflow stopping."}
+
+
+@app.post("/workflow/pause")
+def pause_workflow():
+    with workflow_lock:
+        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.RUNNING:
+            raise HTTPException(status_code=404, detail="No running workflow to pause.")
+        current_workflow.pause()
+    return {"message": "Workflow paused."}
+
+
+@app.post("/workflow/resume")
+def resume_workflow():
+    with workflow_lock:
+        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.RUNNING:
+            raise HTTPException(status_code=404, detail="No running workflow to resume.")
+        current_workflow.resume()
+    return {"message": "Workflow resumed."}
 
 
 @app.post("/workflow/node/{node_id}/restart")
