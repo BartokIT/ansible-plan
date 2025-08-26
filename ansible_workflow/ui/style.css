@@ -71,10 +71,6 @@ RichLog {
 }
 
 /* Styles for the quit confirmation dialog */
-#quit_screen_container {
-    align: center middle;
-}
-
 #dialog {
     width: 60;
     height: 10;
