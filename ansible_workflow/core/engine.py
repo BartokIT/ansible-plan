@@ -217,6 +217,9 @@ class AnsibleWorkflow():
                     node.stop()
             self.__running_status = WorkflowStatus.FAILED
             self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow stopped")
+        else:
+            self.__running_status = WorkflowStatus.STOPPING
+            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow stopping gracefully")
 
     def pause(self):
         self._logger.info("Pausing workflow")

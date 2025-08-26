@@ -12,6 +12,7 @@ class WorkflowStatus(Enum):
     """ Define the character for the application"""
     NOT_STARTED = 'not_started'
     RUNNING = 'running'
+    STOPPING = 'stopping'
     ENDED = 'ended'
     FAILED = 'failed'
 
