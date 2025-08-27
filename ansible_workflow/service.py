@@ -218,10 +218,7 @@ def skip_node(node_id: str):
         if not current_workflow:
             raise HTTPException(status_code=404, detail="Workflow not found.")
 
-        node_obj = current_workflow.get_node_object(node_id)
-        node_obj.set_skipped()
-        # We also need to add it to the running nodes so the workflow progresses
-        current_workflow.add_running_node(node_id)
+        current_workflow.skip_failed_node(node_id)
 
     return {"message": f"Node {node_id} skipped."}
 
