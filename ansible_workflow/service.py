@@ -51,6 +51,7 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
     global current_workflow
     with workflow_lock:
         if current_workflow and current_workflow.get_running_status() in [WorkflowStatus.RUNNING,
+                                                                           WorkflowStatus.PAUSED,
                                                                            WorkflowStatus.ENDED,
                                                                            WorkflowStatus.FAILED]:
             if current_workflow.get_workflow_file() == request.workflow_file:
@@ -177,8 +178,8 @@ def get_node_stdout(node_id: str):
 @app.post("/workflow/stop")
 def stop_workflow(request: StopWorkflowRequest):
     with workflow_lock:
-        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.RUNNING:
-            raise HTTPException(status_code=404, detail="No running workflow to stop.")
+        if not current_workflow or current_workflow.get_running_status() not in [WorkflowStatus.RUNNING, WorkflowStatus.PAUSED]:
+            raise HTTPException(status_code=404, detail="No running or paused workflow to stop.")
         current_workflow.stop(request.mode)
     return {"message": "Workflow stopping."}
 
@@ -195,8 +196,8 @@ def pause_workflow():
 @app.post("/workflow/resume")
 def resume_workflow():
     with workflow_lock:
-        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.RUNNING:
-            raise HTTPException(status_code=404, detail="No running workflow to resume.")
+        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.PAUSED:
+            raise HTTPException(status_code=404, detail="No paused workflow to resume.")
         current_workflow.resume()
     return {"message": "Workflow resumed."}
 

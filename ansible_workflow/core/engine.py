@@ -220,10 +220,14 @@ class AnsibleWorkflow():
 
     def pause(self):
         self._logger.info("Pausing workflow")
+        self.__running_status = WorkflowStatus.PAUSED
+        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow paused")
         self.__pause_event.clear()
 
     def resume(self):
         self._logger.info("Resuming workflow")
+        self.__running_status = WorkflowStatus.RUNNING
+        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow resumed")
         self.__pause_event.set()
 
     def get_some_failed_task(self):
