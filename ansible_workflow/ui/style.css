@@ -65,6 +65,7 @@ RichLog {
     padding: 0;
 }
 
+
 /* Styles for the quit confirmation dialog */
 StopWorkflowScreen {
     align: center middle;
@@ -93,29 +94,30 @@ StopWorkflowScreen > Vertical > Horizontal > Button {
     margin: 2 4;
 }
 
-QuitScreen {
+/* QuitScreen dialog */
+QuitScreen, DoubtfulNodeScreen{
     align: center middle;
 }
 
-QuitScreen > Container {
+DoubtfulNodeScreen > Container, QuitScreen > Container {
     width: auto;
     height: auto;
     border: thick $background 80%;
     background: $surface;
 }
 
-QuitScreen > Container > Label {
+DoubtfulNodeScreen > Container > Label, QuitScreen > Container > Label {
     width: 100%;
     content-align-horizontal: center;
     margin-top: 1;
 }
 
-QuitScreen > Container > Horizontal {
+DoubtfulNodeScreen > Container > Horizontal, QuitScreen > Container > Horizontal {
     width: auto;
     height: auto;
 }
 
-QuitScreen > Container > Horizontal > Button {
+DoubtfulNodeScreen > Container > Horizontal > Button, QuitScreen > Container > Horizontal > Button {
     margin: 2 4;
 }
 

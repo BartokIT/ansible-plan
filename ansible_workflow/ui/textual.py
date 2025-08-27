@@ -428,8 +428,10 @@ class TextualWorkflowOutput(WorkflowOutput):
                 add_detail("Playbook", node_data.get('playbook', '-'))
                 add_detail("Inventory", node_data.get('inventory', '-'))
                 add_detail("Status", node_data.get('status', '-'))
-                add_detail("Started", node_data.get('started', '-'))
-                add_detail("Ended", node_data.get('ended', '-'))
+                if node_data.get('started', False):
+                    add_detail("Started", node_data.get('started', '-'))
+                if node_data.get('ended', False):
+                    add_detail("Ended", node_data.get('ended', '-'))
                 if node_data.get('reference', False):
                     add_detail("Reference", node_data.get('reference', '-'))
                 if node_data.get('description', False):
