@@ -20,13 +20,13 @@ workflow:
       - id: s1
         block:
           - id: sub11
-            import_playbook: playbooks/first.yml
+            import_playbook: playbooks/third.yml
       - id: s2
         import_playbook: playbooks/default_extra_vars_play.yml
   - id: all_params
     inventory: inventory.ini
     project_path: .
-    import_playbook: playbooks/extra_vars_play.yml
+    import_playbook: playbooks/third.yml
     vars:
       extra_var1: "{{ var_number_one }}"
       extra_var2: concatenation{{ var_number_one | upper }}
