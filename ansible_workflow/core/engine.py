@@ -333,6 +333,26 @@ class AnsibleWorkflow():
         self.add_running_node(node_id)
         self.__resume_event.set()
 
+    def skip_failed_node(self, node_id: str):
+        node = self.get_node_object(node_id)
+        if not node or node.get_status() != NodeStatus.FAILED:
+            self._logger.warning(f"Node {node_id} cannot be skipped as it is not in FAILED state.")
+            return
+
+        self._logger.info(f"Skipping failed node {node_id}")
+
+        # Set status back to RUNNING
+        self.__running_status = WorkflowStatus.RUNNING
+        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, f"Workflow resuming, skipping node {node_id}")
+
+        # Set node as skipped
+        node.set_skipped()
+        self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.SKIPPED, node)
+
+        # Add node to running nodes so its successors can be processed
+        self.add_running_node(node_id)
+        self.__resume_event.set()
+
     def run(self, start_node: str = "_s", end_node: str = "_e", verify_only: bool = False):
         '''
         Run the workflows starting from a graph node until reaching the end node.
