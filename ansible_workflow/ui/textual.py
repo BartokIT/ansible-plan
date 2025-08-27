@@ -9,6 +9,7 @@ with warnings.catch_warnings():
     import networkx as nx
 from rich.highlighter import Highlighter
 from rich.text import Text
+from rich.pretty import Pretty
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Tree, RichLog, DataTable, Button, Label
 from textual.containers import Horizontal, Vertical, Container
@@ -352,13 +353,19 @@ class TextualWorkflowOutput(WorkflowOutput):
             def add_detail(key, value):
                 details_table.add_row(key, value, height=None)
 
-            add_detail("ID", node_data.get('id'))
+            add_detail("Node", node_data.get('id'))
             if node_data.get('type') == 'playbook':
-                add_detail("Playbook", node_data.get('playbook', 'N/A'))
-                add_detail("Description", node_data.get('description', 'N/A'))
-                add_detail("Reference", node_data.get('reference', 'N/A'))
-                add_detail("Started", node_data.get('started', 'N/A'))
-                add_detail("Ended", node_data.get('ended', 'N/A'))
+                add_detail("Playbook", node_data.get('playbook', '-'))
+                add_detail("Inventory", node_data.get('inventory', '-'))
+                add_detail("Status", node_data.get('status', '-'))
+                add_detail("Started", node_data.get('started', '-'))
+                add_detail("Ended", node_data.get('ended', '-'))
+                if node_data.get('reference', False):
+                    add_detail("Reference", node_data.get('reference', '-'))
+                if node_data.get('description', False):
+                    add_detail("Description", node_data.get('description', 'CCC'))
+                if node_data.get('extravars', False):
+                    add_detail("Variables", Pretty(node_data.get('extravars', {}), indent_guides=True, expand_all=False))
                 self.show_stdout(node_id)
                 if node_data['status'] == NodeStatus.RUNNING.value:
                     self.stdout_watcher = self.watch_stdout(node_id)

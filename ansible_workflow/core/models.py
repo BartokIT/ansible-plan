@@ -95,7 +95,7 @@ class BNode(Node):
 
 
 class PNode(Node):
-    def __init__(self, id, playbook, inventory, artifact_dir, limit=None, project_path=None, extra_vars={}, vault_ids=[], check_mode=False, diff_mode=True, verbosity=1, description='N/A', reference='N/A'):
+    def __init__(self, id, playbook, inventory, artifact_dir, limit=None, project_path=None, extra_vars={}, vault_ids=[], check_mode=False, diff_mode=True, verbosity=1, description='', reference=''):
         super(PNode, self).__init__(id)
         self.__playbook = playbook
         self.__inventory = inventory
@@ -174,8 +174,15 @@ class PNode(Node):
     def get_playbook(self):
         return self.__playbook
 
+    def get_inventory(self):
+        return self.__inventory
+
+    def get_extravars(self):
+        return self.__extravars
+
     def get_description(self):
         return self.__description
+
     def get_reference(self):
         return self.__reference
 

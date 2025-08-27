@@ -137,6 +137,8 @@ def get_workflow_nodes():
             if isinstance(node_obj, PNode):
                 node_info.update({
                     "playbook": node_obj.get_playbook(),
+                    "inventory": node_obj.get_inventory(),
+                    "extravars": node_obj.get_extravars(),
                     "description": node_obj.get_description(),
                     "reference": node_obj.get_reference(),
                 })

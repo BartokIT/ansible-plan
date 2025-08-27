@@ -7,6 +7,8 @@ import select
 import tty
 import termios
 from rich.table import Table
+from rich.prompt import Prompt
+from rich.text import Text
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
 
@@ -30,7 +32,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self._logger.debug("Initializing stdout output")
         if self.is_verify_only():
             self.__console.print("[bold yellow]Running in VERIFY ONLY mode[/]", justify="center")
-        self.__console.print("\n[bold cyan]Press Ctrl+X to stop the workflow.[/]\n", justify="center")
+        self.__console.print("\n[bold cyan]Press Ctrl+X to stop the workflow or Ctrl+C to detach from the backend[/]\n", justify="center")
         self.__console.print("[italic]Waiting for workflow to start...[/]", justify="center")
 
         nodes = self.api_client.get_all_nodes()
@@ -38,28 +40,43 @@ class StdoutWorkflowOutput(WorkflowOutput):
             time.sleep(1)
             nodes = self.api_client.get_all_nodes()
 
+        # calculate first column size
+        maximum_first_colum_width = 0
+        if nodes:
+            for node in nodes:
+                if len(node['id']) > maximum_first_colum_width:
+                    maximum_first_colum_width = len(node['id'])
+
+        if maximum_first_colum_width < 17:
+            self.__first_column_width = 17
+        else:
+            self.__first_column_width = maximum_first_colum_width
+
         table = Table(title="Workflow nodes")
-        table.add_column("Node", justify="left", style="cyan", no_wrap=True)
+        table.add_column("Node", justify="left", style="cyan", no_wrap=True, width=self.__first_column_width)
         table.add_column("Playbook", style="bright_magenta")
         table.add_column("Ref.", style="cyan")
         table.add_column("Started", style="green")
         table.add_column("Ended", style="green")
         table.add_column("Status")
 
+
         if nodes:
             for node in nodes:
                 if node['type'] == 'playbook':
                     self.known_nodes[node['id']] = node
+
                     table.add_row(
                         node['id'],
-                        node.get('playbook', 'N/A'),
-                        node.get('reference', 'N/A'),
+                        node.get('playbook', '-'),
+                        node.get('reference', '-'),
                         node.get('started', ''),
                         node.get('ended', ''),
                         self._render_status(node['status'])
                     )
         self.__console.print(table)
         self.__console.print("")
+
 
         if nodes and self.__interactive_retry:
             for node in nodes:
@@ -105,7 +122,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         nodes = self.api_client.get_all_nodes()
         table = Table(title="Running recap")
 
-        table.add_column("Node", justify="left", style="cyan", no_wrap=True)
+        table.add_column("Node", justify="left", style="cyan", no_wrap=True, width=self.__first_column_width)
         table.add_column("Playbook", style="bright_magenta")
         table.add_column("Ref.", style="cyan")
         table.add_column("Started", style="green")
@@ -117,8 +134,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
                 if node['type'] == 'playbook':
                     table.add_row(
                         node['id'],
-                        node.get('playbook', 'N/A'),
-                        node.get('reference', 'N/A'),
+                        node.get('playbook', '-'),
+                        node.get('reference', '-'),
                         node.get('started', ''),
                         node.get('ended', ''),
                         self._render_status(node['status'])
@@ -151,11 +168,11 @@ class StdoutWorkflowOutput(WorkflowOutput):
         elif status in [NodeStatus.ENDED.value, NodeStatus.FAILED.value, NodeStatus.SKIPPED.value, NodeStatus.STOPPED.value]:
             timestamp = node.get('ended', '')
 
-        if not timestamp:
-            timestamp = datetime.now().strftime('%H:%M:%S')
+        # if not timestamp:
+        #     timestamp = datetime.now().strftime('%H:%M:%S')
 
         table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
-        table.add_column()
+        table.add_column(width=(self.__first_column_width +1), justify="right")
         table.add_column()
         status_text = self._render_status(node['status'])
         table.add_row(
@@ -166,34 +183,36 @@ class StdoutWorkflowOutput(WorkflowOutput):
 
     def handle_retry(self, node):
         y_or_n = ''
-
+        self.__console.line()
+        self.__console.rule("node \[[italic]" + node['id'] +"[/italic]] failed")
         table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
+        #table.add_column()
+        table.add_column(width=(self.__first_column_width+1), justify="right")
         table.add_column()
-        table.add_column(justify="right")
-        table.add_column()
-
-        table.add_row('','','')
-        table.add_section()
-        table.add_row('','[bright_magenta]Node[/]',f"[cyan]{node['id']}[/]")
-        table.add_row('','[bright_magenta]Reference[/]',node.get('reference', 'N/A'))
-        table.add_row('','     [bright_magenta]Description[/]',node.get('description', 'N/A'))
-        table.add_section()
-        table.add_row('','','')
+        table.add_row('[bright_magenta]Node[/]',f"[cyan]{node['id']}[/]")
+        table.add_row('[bright_magenta]Reference[/]',node.get('reference', '-'))
+        table.add_row('[bright_magenta]Description[/]',node.get('description', '-'))
         self.__console.print(table)
 
         while y_or_n.lower() not in ['y', 'n', 's', 'l']:
             table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
-            table.add_column()
+            table.add_column(width=self.__first_column_width)
             table.add_column(justify="right")
             table.add_column()
-            table.add_row('', '?               ', '[white]-> Do you want to restart? [green]y[/](yes) / [bright_red]n[/](no) / [cyan]s[/](skip) / [bright_magenta]l[/](logs): ')
             self.__console.print(table)
-            y_or_n = self.__console.input('  │ >>>>>>>>>>>>>>>> │ ')
+            self.__console.line()
+            y_or_n = Prompt.ask("[white] Do you want to restart the node [\{}]? [green]y[/](yes) / [bright_red]n[/](no) / [cyan]s[/](skip) / [bright_magenta]l[/](logs)".format(node['id']),
+                                console=self.__console,
+                                show_choices=False,
+                                choices=["n","y","s","l"])
+
             if y_or_n == 'l':
                 stdout = self.api_client.get_node_stdout(node['id'])
                 if stdout:
-                    self.__console.print(stdout)
-
+                    self.__console.line()
+                    self.__console.print(Text.from_ansi(stdout))
+        self.__console.line()
+        self.__console.rule()
 
         if y_or_n == 'y':
             self.api_client.restart_node(node['id'])
