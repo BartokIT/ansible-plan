@@ -225,7 +225,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                         self.status_message = f"[bold red]Validation Error:[/bold red] {errors[0]}"
             else:
                 self.status_message = "[red]Backend: Disconnected[/red]"
-                self.call_from_thread(setattr, self.action_buttons, 'display', False)
+                self.call_from_thread(self._set_widget_display, self.action_buttons, False)
 
         def on_mount(self) -> None:
             self.action_buttons = self.query_one("#action_buttons")
@@ -275,6 +275,9 @@ class TextualWorkflowOutput(WorkflowOutput):
             else:
                 self.api_client.disapprove_node(node_id)
             self.approved_nodes.add(node_id)
+
+        def _set_widget_display(self, widget, display):
+            widget.display = display
 
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
@@ -369,9 +372,9 @@ class TextualWorkflowOutput(WorkflowOutput):
                     # If the updated node is the one currently selected, refresh the action buttons
                     if node_id == self.selected_node_id:
                         if status == NodeStatus.FAILED.value:
-                            self.call_from_thread(setattr, self.action_buttons, 'display', True)
+                            self.call_from_thread(self._set_widget_display, self.action_buttons, True)
                         else:
-                            self.call_from_thread(setattr, self.action_buttons, 'display', False)
+                            self.call_from_thread(self._set_widget_display, self.action_buttons, False)
 
                     if status == NodeStatus.AWAITING_CONFIRMATION.value:
                         if node_id not in self.approved_nodes:
