@@ -17,6 +17,7 @@ from textual.screen import Screen, ModalScreen
 from textual import work
 from textual.reactive import reactive
 from textual.theme import BUILTIN_THEMES
+from collections import deque
 from textual.css.query import NoMatches
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -86,6 +87,31 @@ class StopWorkflowScreen(ModalScreen):
             self.dismiss(None)
 
 
+class DoubtfulNodeScreen(ModalScreen):
+    """Screen with a dialog to approve or skip a node."""
+
+    def __init__(self, node_id: str, **kwargs):
+        super().__init__(**kwargs)
+        self.node_id = node_id
+
+    def compose(self) -> ComposeResult:
+        yield Container(
+            Label(f"Node [b]{self.node_id}[/b] is awaiting your confirmation.", id="question"),
+            Horizontal(
+                Button("Approve", variant="success", id="approve"),
+                Button("Skip", variant="primary", id="skip"),
+                id="buttons",
+            ),
+            id="dialog",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "approve":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
+
+
 class NullHighlighter(Highlighter):
     def highlight(self, text):
         pass
@@ -145,10 +171,12 @@ class TextualWorkflowOutput(WorkflowOutput):
             self.node_data = {}
             self.graph = nx.DiGraph()
             self.spinner_icons = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+            self.approved_nodes = set()
             self.status_icons = {
                 NodeStatus.NOT_STARTED.value: "○",
                 NodeStatus.PRE_RUNNING.value: "[yellow]…[/yellow]",
                 NodeStatus.RUNNING.value: "[yellow]○[/yellow]",
+                NodeStatus.AWAITING_CONFIRMATION.value: "[bold yellow]?[/]",
                 NodeStatus.ENDED.value: "[green]✔[/green]",
                 NodeStatus.FAILED.value: "[red]✖[/red]",
                 NodeStatus.SKIPPED.value: "[cyan]»[/cyan]",
@@ -159,6 +187,12 @@ class TextualWorkflowOutput(WorkflowOutput):
             self.active_spinners = set()
             self.stdout_watcher = None
             self._shutdown_event = threading.Event()
+            self.action_buttons = None
+            self.stdout_log = None
+            self.details_table = None
+            self._node_tree = None
+            self.doubtful_node_queue = deque()
+            self.pending_confirmation_nodes = set()
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -184,7 +218,6 @@ class TextualWorkflowOutput(WorkflowOutput):
 
         @work(thread=True)
         def update_status(self):
-            action_buttons = self.query_one("#action_buttons")
             if self.api_client.check_health():
                 self.status_message = "[green]Backend: Connected[/green]"
 
@@ -195,9 +228,13 @@ class TextualWorkflowOutput(WorkflowOutput):
                         self.status_message = f"[bold red]Validation Error:[/bold red] {errors[0]}"
             else:
                 self.status_message = "[red]Backend: Disconnected[/red]"
-                action_buttons.display = False
+                self.call_from_thread(self._set_widget_display, self.action_buttons, False)
 
         def on_mount(self) -> None:
+            self.action_buttons = self.query_one("#action_buttons")
+            self.stdout_log = self.query_one("#playbook_stdout", RichLog)
+            self.details_table = self.query_one("#node_details", DataTable)
+            self._node_tree = self.query_one(Tree)
             self.initial_setup()
             self.set_interval(1, self.update_status)
             self.set_interval(0.5, self.update_node_statuses)
@@ -234,6 +271,30 @@ class TextualWorkflowOutput(WorkflowOutput):
             else:
                 self.api_client.resume_workflow()
 
+        def check_doubtful_node(self, result: bool, node_id: str) -> None:
+            """Called when the DoubtfulNodeScreen is dismissed."""
+            if result:
+                self.api_client.approve_node(node_id)
+            else:
+                self.api_client.disapprove_node(node_id)
+            self.approved_nodes.add(node_id)
+            self.pending_confirmation_nodes.remove(node_id)
+            self._process_doubtful_queue()
+
+        def _set_widget_display(self, widget, display):
+            widget.display = display
+
+        def _push_doubtful_node_screen(self, node_id):
+            self.push_screen(
+                DoubtfulNodeScreen(node_id),
+                lambda result: self.check_doubtful_node(result, node_id)
+            )
+
+        def _process_doubtful_queue(self):
+            if not self.is_modal and self.doubtful_node_queue:
+                node_id = self.doubtful_node_queue.popleft()
+                self._push_doubtful_node_screen(node_id)
+
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
             self.app.theme = next(self.theme_cycle)
@@ -260,14 +321,16 @@ class TextualWorkflowOutput(WorkflowOutput):
                     self.node_data[node['id']] = node
 
             # Build the tree
-            tree = self.query_one(Tree)
             root_node_id = "_root"
-            root_node = tree.root
-            root_node.data = root_node_id
-            self.tree_nodes[root_node_id] = root_node
 
-            self._build_tree(root_node_id, root_node)
-            tree.root.expand_all()
+            def build_initial_tree():
+                root_node = self._node_tree.root
+                root_node.data = root_node_id
+                self.tree_nodes[root_node_id] = root_node
+                self._build_tree(root_node_id, root_node)
+                self._node_tree.root.expand_all()
+
+            self.call_from_thread(build_initial_tree)
 
         def _build_tree(self, node_id, tree_node):
             for child_id in self.graph.successors(node_id):
@@ -298,6 +361,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 return
             final_node_states = {node['id']: node for node in nodes_from_api}
 
+            nodes_need_approval = False
             for node_id, node in final_node_states.items():
                 if node_id in self.tree_nodes and node_id != "_root":
                     # Update the central data store
@@ -320,15 +384,23 @@ class TextualWorkflowOutput(WorkflowOutput):
                         else:
                             icon = self.status_icons.get(status, " ")
                             label = f"{icon} {node_id}"
-                        tree_node.set_label(label)
+                        self.call_from_thread(tree_node.set_label, label)
 
                     # If the updated node is the one currently selected, refresh the action buttons
                     if node_id == self.selected_node_id:
-                        action_buttons = self.query_one("#action_buttons")
                         if status == NodeStatus.FAILED.value:
-                            action_buttons.display = True
+                            self.call_from_thread(self._set_widget_display, self.action_buttons, True)
                         else:
-                            action_buttons.display = False
+                            self.call_from_thread(self._set_widget_display, self.action_buttons, False)
+
+                    if status == NodeStatus.AWAITING_CONFIRMATION.value:
+                        if node_id not in self.approved_nodes and node_id not in self.pending_confirmation_nodes:
+                            self.pending_confirmation_nodes.add(node_id)
+                            self.doubtful_node_queue.append(node_id)
+                            nodes_need_approval = True
+
+            if nodes_need_approval:
+                self.call_from_thread(self._process_doubtful_queue)
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:
@@ -338,28 +410,28 @@ class TextualWorkflowOutput(WorkflowOutput):
             node_id = event.node.data
             self.selected_node_id = node_id
             node_data = self.node_data.get(node_id)
-            action_buttons = self.query_one("#action_buttons")
 
             if not node_data:
-                action_buttons.display = False
+                self.action_buttons.display = False
                 return
 
-            details_table = self.query_one("#node_details", DataTable)
-            details_table.clear()
-            if not details_table.columns:
-                details_table.add_column("Property", width=20)
-                details_table.add_column("Value")
+            self.details_table.clear()
+            if not self.details_table.columns:
+                self.details_table.add_column("Property", width=20)
+                self.details_table.add_column("Value")
 
             def add_detail(key, value):
-                details_table.add_row(key, value, height=None)
+                self.details_table.add_row(key, value, height=None)
 
             add_detail("Node", node_data.get('id'))
             if node_data.get('type') == 'playbook':
                 add_detail("Playbook", node_data.get('playbook', '-'))
                 add_detail("Inventory", node_data.get('inventory', '-'))
                 add_detail("Status", node_data.get('status', '-'))
-                add_detail("Started", node_data.get('started', '-'))
-                add_detail("Ended", node_data.get('ended', '-'))
+                if node_data.get('started', False):
+                    add_detail("Started", node_data.get('started', '-'))
+                if node_data.get('ended', False):
+                    add_detail("Ended", node_data.get('ended', '-'))
                 if node_data.get('reference', False):
                     add_detail("Reference", node_data.get('reference', '-'))
                 if node_data.get('description', False):
@@ -373,9 +445,9 @@ class TextualWorkflowOutput(WorkflowOutput):
                  add_detail("Type", "Block")
 
             if node_data.get('status') == NodeStatus.FAILED.value:
-                action_buttons.display = True
+                self.action_buttons.display = True
             else:
-                action_buttons.display = False
+                self.action_buttons.display = False
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
             """Called when a button is pressed."""
@@ -383,7 +455,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 if event.button.id == "relaunch_button":
                     self.api_client.restart_node(self.selected_node_id)
                     # Clear the log and start watching for new output
-                    self.query_one("#playbook_stdout", RichLog).clear()
+                    self.stdout_log.clear()
                     if self.stdout_watcher:
                         self.stdout_watcher.cancel()
                     self.stdout_watcher = self.watch_stdout(self.selected_node_id)
@@ -391,11 +463,10 @@ class TextualWorkflowOutput(WorkflowOutput):
                     self.api_client.skip_node(self.selected_node_id)
 
             # Hide buttons after action
-            self.query_one("#action_buttons").display = False
+            self.action_buttons.display = False
 
         @work(exclusive=True, thread=True)
         def watch_stdout(self, node_id: str):
-            stdout_log = self.query_one("#playbook_stdout", RichLog)
             last_content = self.api_client.get_node_stdout(node_id)
             if last_content is None:
                 return
@@ -408,7 +479,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 if current_stdout != last_content:
                     new_content = current_stdout[len(last_content):]
                     text = Text.from_ansi(new_content)
-                    stdout_log.write(text)
+                    self.call_from_thread(self.stdout_log.write, text)
                     last_content = current_stdout
 
                 status_response = self.api_client.get_all_nodes()
@@ -440,7 +511,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 # Final check to prevent a race condition where the status changes
                 # between the while-check and this set_label call.
                 if self.node_data.get(node_id, {}).get('status') == NodeStatus.RUNNING.value:
-                    tree_node.set_label(label)
+                    self.call_from_thread(tree_node.set_label, label)
 
                 time.sleep(0.1)
 
@@ -453,9 +524,8 @@ class TextualWorkflowOutput(WorkflowOutput):
         @work(exclusive=True, thread=True)
         def show_stdout(self, node_id: str):
             """Reads and displays the entire stdout for a given node."""
-            stdout_log = self.query_one("#playbook_stdout", RichLog)
-            stdout_log.clear()
+            self.call_from_thread(self.stdout_log.clear)
             stdout = self.api_client.get_node_stdout(node_id)
             if stdout is not None:
                 text = Text.from_ansi(stdout)
-                stdout_log.write(text)
+                self.call_from_thread(self.stdout_log.write, text)

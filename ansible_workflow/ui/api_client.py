@@ -86,6 +86,20 @@ class ApiClient:
         except (httpx.ConnectError, httpx.HTTPStatusError):
             pass
 
+    def approve_node(self, node_id: str):
+        try:
+            response = self.client.post(f"/workflow/node/{node_id}/approve")
+            response.raise_for_status()
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            pass
+
+    def disapprove_node(self, node_id: str):
+        try:
+            response = self.client.post(f"/workflow/node/{node_id}/disapprove")
+            response.raise_for_status()
+        except (httpx.ConnectError, httpx.HTTPStatusError):
+            pass
+
     def check_health(self) -> bool:
         try:
             response = self.client.get("/health")

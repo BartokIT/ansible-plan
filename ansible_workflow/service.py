@@ -44,6 +44,7 @@ class WorkflowStartRequest(BaseModel):
     log_dir_no_info: bool = False
     log_level: str = "info"
     verify_only: bool = False
+    doubtful_mode: bool = False
 
 
 @app.post("/workflow")
@@ -51,6 +52,7 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
     global current_workflow
     with workflow_lock:
         if current_workflow and current_workflow.get_running_status() in [WorkflowStatus.RUNNING,
+                                                                           WorkflowStatus.PAUSED,
                                                                            WorkflowStatus.ENDED,
                                                                            WorkflowStatus.FAILED]:
             if current_workflow.get_workflow_file() == request.workflow_file:
@@ -73,6 +75,7 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
                 request.input_templating,
                 request.check_mode,
                 request.verbosity,
+                request.doubtful_mode,
             )
             aw = loader.parse(request.extra_vars)
             current_workflow = aw
@@ -85,6 +88,7 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
                 workflow_file=request.workflow_file,
                 logging_dir=logging_dir,
                 log_level=request.log_level,
+                doubtful_mode=request.doubtful_mode,
             )
             aw.add_validation_error(str(e))
             aw.set_status(WorkflowStatus.FAILED)
@@ -177,8 +181,8 @@ def get_node_stdout(node_id: str):
 @app.post("/workflow/stop")
 def stop_workflow(request: StopWorkflowRequest):
     with workflow_lock:
-        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.RUNNING:
-            raise HTTPException(status_code=404, detail="No running workflow to stop.")
+        if not current_workflow or current_workflow.get_running_status() not in [WorkflowStatus.RUNNING, WorkflowStatus.PAUSED]:
+            raise HTTPException(status_code=404, detail="No running or paused workflow to stop.")
         current_workflow.stop(request.mode)
     return {"message": "Workflow stopping."}
 
@@ -195,8 +199,8 @@ def pause_workflow():
 @app.post("/workflow/resume")
 def resume_workflow():
     with workflow_lock:
-        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.RUNNING:
-            raise HTTPException(status_code=404, detail="No running workflow to resume.")
+        if not current_workflow or current_workflow.get_running_status() != WorkflowStatus.PAUSED:
+            raise HTTPException(status_code=404, detail="No paused workflow to resume.")
         current_workflow.resume()
     return {"message": "Workflow resumed."}
 
@@ -221,6 +225,24 @@ def skip_node(node_id: str):
         current_workflow.skip_failed_node(node_id)
 
     return {"message": f"Node {node_id} skipped."}
+
+
+@app.post("/workflow/node/{node_id}/approve")
+def approve_node(node_id: str):
+    with workflow_lock:
+        if not current_workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found.")
+        current_workflow.approve_node(node_id)
+    return {"message": f"Node {node_id} approved."}
+
+
+@app.post("/workflow/node/{node_id}/disapprove")
+def disapprove_node(node_id: str):
+    with workflow_lock:
+        if not current_workflow:
+            raise HTTPException(status_code=404, detail="Workflow not found.")
+        current_workflow.disapprove_node(node_id)
+    return {"message": f"Node {node_id} disapproved."}
 
 
 @app.post("/shutdown")

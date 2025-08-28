@@ -25,6 +25,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.known_nodes = {}
         self.user_chose_to_quit = False
         self.declined_retry_nodes = set()
+        self.approved_nodes = set()
         self.console_lock = threading.Lock()
         self.stop_requested = False
 
@@ -101,6 +102,10 @@ class StdoutWorkflowOutput(WorkflowOutput):
                         self.handle_retry(node)
                         found_failed_node_to_prompt = True
 
+                if node['status'] == NodeStatus.AWAITING_CONFIRMATION.value and self.__doubtful_mode:
+                    if node['id'] not in self.approved_nodes:
+                        self.handle_doubtful_node(node)
+
         status_data = self.api_client.get_workflow_status()
         if status_data.get('status') == 'failed' and not found_failed_node_to_prompt:
             self.user_chose_to_quit = True
@@ -157,8 +162,44 @@ class StdoutWorkflowOutput(WorkflowOutput):
             return '[cyan]skipped[/]'
         elif status == NodeStatus.STOPPED.value:
             return '[red]stopped[/]'
+        elif status == NodeStatus.AWAITING_CONFIRMATION.value:
+            return '[bold yellow]awaiting confirmation[/]'
         else:
             return 'unknown'
+
+    def handle_doubtful_node(self, node):
+        y_or_n = ''
+        self.__console.line()
+        self.__console.rule("node \[[italic]" + node['id'] +"[/italic]] awaiting confirmation")
+        table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
+        table.add_column(width=(self.__first_column_width+1), justify="right")
+        table.add_column()
+        table.add_row('[bright_magenta]Node[/]',f"[cyan]{node['id']}[/]")
+        table.add_row('[bright_magenta]Reference[/]',node.get('reference', '-'))
+        table.add_row('[bright_magenta]Description[/]',node.get('description', '-'))
+        self.__console.print(table)
+
+        while y_or_n.lower() not in ['y', 'n']:
+            table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
+            table.add_column(width=self.__first_column_width)
+            table.add_column(justify="right")
+            table.add_column()
+            self.__console.print(table)
+            self.__console.line()
+            y_or_n = Prompt.ask("[white] Do you want to run the node \[{}]? [green]y[/](yes) / [bright_red]n[/](no/skip)".format(node['id']),
+                                console=self.__console,
+                                show_choices=False,
+                                choices=["n","y"])
+
+        self.__console.line()
+        self.__console.rule()
+
+        if y_or_n == 'y':
+            self.api_client.approve_node(node['id'])
+        elif y_or_n == 'n':
+            self.api_client.disapprove_node(node['id'])
+
+        self.approved_nodes.add(node['id'])
 
     def print_node_status_change(self, node):
         status = node.get('status')
