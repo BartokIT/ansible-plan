@@ -367,7 +367,11 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                     if status == NodeStatus.AWAITING_CONFIRMATION.value:
                         if node_id not in self.approved_nodes:
-                            self.push_screen(DoubtfulNodeScreen(node_id), lambda result: self.check_doubtful_node(result, node_id))
+                            self.call_from_thread(
+                                self.push_screen,
+                                DoubtfulNodeScreen(node_id),
+                                lambda result: self.check_doubtful_node(result, node_id)
+                            )
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:
