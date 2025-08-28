@@ -297,12 +297,15 @@ class TextualWorkflowOutput(WorkflowOutput):
             # Build the tree
             tree = self.query_one(Tree)
             root_node_id = "_root"
-            root_node = tree.root
-            root_node.data = root_node_id
-            self.tree_nodes[root_node_id] = root_node
 
-            self._build_tree(root_node_id, root_node)
-            tree.root.expand_all()
+            def build_initial_tree():
+                root_node = tree.root
+                root_node.data = root_node_id
+                self.tree_nodes[root_node_id] = root_node
+                self._build_tree(root_node_id, root_node)
+                tree.root.expand_all()
+
+            self.call_from_thread(build_initial_tree)
 
         def _build_tree(self, node_id, tree_node):
             for child_id in self.graph.successors(node_id):
@@ -355,7 +358,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                         else:
                             icon = self.status_icons.get(status, " ")
                             label = f"{icon} {node_id}"
-                        tree_node.set_label(label)
+                        self.call_from_thread(tree_node.set_label, label)
 
                     # If the updated node is the one currently selected, refresh the action buttons
                     if node_id == self.selected_node_id:
@@ -451,7 +454,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 if current_stdout != last_content:
                     new_content = current_stdout[len(last_content):]
                     text = Text.from_ansi(new_content)
-                    stdout_log.write(text)
+                    self.call_from_thread(stdout_log.write, text)
                     last_content = current_stdout
 
                 status_response = self.api_client.get_all_nodes()
@@ -483,7 +486,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 # Final check to prevent a race condition where the status changes
                 # between the while-check and this set_label call.
                 if self.node_data.get(node_id, {}).get('status') == NodeStatus.RUNNING.value:
-                    tree_node.set_label(label)
+                    self.call_from_thread(tree_node.set_label, label)
 
                 time.sleep(0.1)
 
@@ -497,8 +500,8 @@ class TextualWorkflowOutput(WorkflowOutput):
         def show_stdout(self, node_id: str):
             """Reads and displays the entire stdout for a given node."""
             stdout_log = self.query_one("#playbook_stdout", RichLog)
-            stdout_log.clear()
+            self.call_from_thread(stdout_log.clear)
             stdout = self.api_client.get_node_stdout(node_id)
             if stdout is not None:
                 text = Text.from_ansi(stdout)
-                stdout_log.write(text)
+                self.call_from_thread(stdout_log.write, text)
