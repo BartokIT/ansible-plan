@@ -186,6 +186,10 @@ class TextualWorkflowOutput(WorkflowOutput):
             self.active_spinners = set()
             self.stdout_watcher = None
             self._shutdown_event = threading.Event()
+            self.action_buttons = None
+            self.stdout_log = None
+            self.details_table = None
+            self.tree = None
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -211,7 +215,6 @@ class TextualWorkflowOutput(WorkflowOutput):
 
         @work(thread=True)
         def update_status(self):
-            action_buttons = self.query_one("#action_buttons")
             if self.api_client.check_health():
                 self.status_message = "[green]Backend: Connected[/green]"
 
@@ -222,9 +225,13 @@ class TextualWorkflowOutput(WorkflowOutput):
                         self.status_message = f"[bold red]Validation Error:[/bold red] {errors[0]}"
             else:
                 self.status_message = "[red]Backend: Disconnected[/red]"
-                action_buttons.display = False
+                self.call_from_thread(setattr, self.action_buttons, 'display', False)
 
         def on_mount(self) -> None:
+            self.action_buttons = self.query_one("#action_buttons")
+            self.stdout_log = self.query_one("#playbook_stdout", RichLog)
+            self.details_table = self.query_one("#node_details", DataTable)
+            self.tree = self.query_one(Tree)
             self.initial_setup()
             self.set_interval(1, self.update_status)
             self.set_interval(0.5, self.update_node_statuses)
@@ -295,15 +302,14 @@ class TextualWorkflowOutput(WorkflowOutput):
                     self.node_data[node['id']] = node
 
             # Build the tree
-            tree = self.query_one(Tree)
             root_node_id = "_root"
 
             def build_initial_tree():
-                root_node = tree.root
+                root_node = self.tree.root
                 root_node.data = root_node_id
                 self.tree_nodes[root_node_id] = root_node
                 self._build_tree(root_node_id, root_node)
-                tree.root.expand_all()
+                self.tree.root.expand_all()
 
             self.call_from_thread(build_initial_tree)
 
@@ -362,11 +368,10 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                     # If the updated node is the one currently selected, refresh the action buttons
                     if node_id == self.selected_node_id:
-                        action_buttons = self.query_one("#action_buttons")
                         if status == NodeStatus.FAILED.value:
-                            action_buttons.display = True
+                            self.call_from_thread(setattr, self.action_buttons, 'display', True)
                         else:
-                            action_buttons.display = False
+                            self.call_from_thread(setattr, self.action_buttons, 'display', False)
 
                     if status == NodeStatus.AWAITING_CONFIRMATION.value:
                         if node_id not in self.approved_nodes:
@@ -384,20 +389,18 @@ class TextualWorkflowOutput(WorkflowOutput):
             node_id = event.node.data
             self.selected_node_id = node_id
             node_data = self.node_data.get(node_id)
-            action_buttons = self.query_one("#action_buttons")
 
             if not node_data:
-                action_buttons.display = False
+                self.action_buttons.display = False
                 return
 
-            details_table = self.query_one("#node_details", DataTable)
-            details_table.clear()
-            if not details_table.columns:
-                details_table.add_column("Property", width=20)
-                details_table.add_column("Value")
+            self.details_table.clear()
+            if not self.details_table.columns:
+                self.details_table.add_column("Property", width=20)
+                self.details_table.add_column("Value")
 
             def add_detail(key, value):
-                details_table.add_row(key, value, height=None)
+                self.details_table.add_row(key, value, height=None)
 
             add_detail("Node", node_data.get('id'))
             if node_data.get('type') == 'playbook':
@@ -419,9 +422,9 @@ class TextualWorkflowOutput(WorkflowOutput):
                  add_detail("Type", "Block")
 
             if node_data.get('status') == NodeStatus.FAILED.value:
-                action_buttons.display = True
+                self.action_buttons.display = True
             else:
-                action_buttons.display = False
+                self.action_buttons.display = False
 
         def on_button_pressed(self, event: Button.Pressed) -> None:
             """Called when a button is pressed."""
@@ -429,7 +432,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 if event.button.id == "relaunch_button":
                     self.api_client.restart_node(self.selected_node_id)
                     # Clear the log and start watching for new output
-                    self.query_one("#playbook_stdout", RichLog).clear()
+                    self.stdout_log.clear()
                     if self.stdout_watcher:
                         self.stdout_watcher.cancel()
                     self.stdout_watcher = self.watch_stdout(self.selected_node_id)
@@ -437,11 +440,10 @@ class TextualWorkflowOutput(WorkflowOutput):
                     self.api_client.skip_node(self.selected_node_id)
 
             # Hide buttons after action
-            self.query_one("#action_buttons").display = False
+            self.action_buttons.display = False
 
         @work(exclusive=True, thread=True)
         def watch_stdout(self, node_id: str):
-            stdout_log = self.query_one("#playbook_stdout", RichLog)
             last_content = self.api_client.get_node_stdout(node_id)
             if last_content is None:
                 return
@@ -454,7 +456,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 if current_stdout != last_content:
                     new_content = current_stdout[len(last_content):]
                     text = Text.from_ansi(new_content)
-                    self.call_from_thread(stdout_log.write, text)
+                    self.call_from_thread(self.stdout_log.write, text)
                     last_content = current_stdout
 
                 status_response = self.api_client.get_all_nodes()
@@ -499,9 +501,8 @@ class TextualWorkflowOutput(WorkflowOutput):
         @work(exclusive=True, thread=True)
         def show_stdout(self, node_id: str):
             """Reads and displays the entire stdout for a given node."""
-            stdout_log = self.query_one("#playbook_stdout", RichLog)
-            self.call_from_thread(stdout_log.clear)
+            self.call_from_thread(self.stdout_log.clear)
             stdout = self.api_client.get_node_stdout(node_id)
             if stdout is not None:
                 text = Text.from_ansi(stdout)
-                self.call_from_thread(stdout_log.write, text)
+                self.call_from_thread(self.stdout_log.write, text)
