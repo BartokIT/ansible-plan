@@ -237,7 +237,6 @@ class TextualWorkflowOutput(WorkflowOutput):
             self.initial_setup()
             self.set_interval(1, self.update_status)
             self.set_interval(0.5, self.update_node_statuses)
-            self.set_interval(0.1, self._process_doubtful_queue)
 
         def action_quit(self) -> None:
             """Called when the user quits the application."""
@@ -278,6 +277,7 @@ class TextualWorkflowOutput(WorkflowOutput):
             else:
                 self.api_client.disapprove_node(node_id)
             self.approved_nodes.add(node_id)
+            self._process_doubtful_queue()
 
         def _set_widget_display(self, widget, display):
             widget.display = display
@@ -359,6 +359,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 return
             final_node_states = {node['id']: node for node in nodes_from_api}
 
+            nodes_need_approval = False
             for node_id, node in final_node_states.items():
                 if node_id in self.tree_nodes and node_id != "_root":
                     # Update the central data store
@@ -393,6 +394,10 @@ class TextualWorkflowOutput(WorkflowOutput):
                     if status == NodeStatus.AWAITING_CONFIRMATION.value:
                         if node_id not in self.approved_nodes and node_id not in self.doubtful_node_queue:
                             self.doubtful_node_queue.append(node_id)
+                            nodes_need_approval = True
+
+            if nodes_need_approval:
+                self.call_from_thread(self._process_doubtful_queue)
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:
