@@ -17,6 +17,7 @@ from textual.screen import Screen, ModalScreen
 from textual import work
 from textual.reactive import reactive
 from textual.theme import BUILTIN_THEMES
+from collections import deque
 from textual.css.query import NoMatches
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -189,7 +190,8 @@ class TextualWorkflowOutput(WorkflowOutput):
             self.action_buttons = None
             self.stdout_log = None
             self.details_table = None
-            self.tree = None
+            self._node_tree = None
+            self.doubtful_node_queue = deque()
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -231,10 +233,11 @@ class TextualWorkflowOutput(WorkflowOutput):
             self.action_buttons = self.query_one("#action_buttons")
             self.stdout_log = self.query_one("#playbook_stdout", RichLog)
             self.details_table = self.query_one("#node_details", DataTable)
-            self.tree = self.query_one(Tree)
+            self._node_tree = self.query_one(Tree)
             self.initial_setup()
             self.set_interval(1, self.update_status)
             self.set_interval(0.5, self.update_node_statuses)
+            self.set_interval(0.1, self._process_doubtful_queue)
 
         def action_quit(self) -> None:
             """Called when the user quits the application."""
@@ -285,6 +288,11 @@ class TextualWorkflowOutput(WorkflowOutput):
                 lambda result: self.check_doubtful_node(result, node_id)
             )
 
+        def _process_doubtful_queue(self):
+            if not self.is_modal and self.doubtful_node_queue:
+                node_id = self.doubtful_node_queue.popleft()
+                self._push_doubtful_node_screen(node_id)
+
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
             self.app.theme = next(self.theme_cycle)
@@ -314,11 +322,11 @@ class TextualWorkflowOutput(WorkflowOutput):
             root_node_id = "_root"
 
             def build_initial_tree():
-                root_node = self.tree.root
+                root_node = self._node_tree.root
                 root_node.data = root_node_id
                 self.tree_nodes[root_node_id] = root_node
                 self._build_tree(root_node_id, root_node)
-                self.tree.root.expand_all()
+                self._node_tree.root.expand_all()
 
             self.call_from_thread(build_initial_tree)
 
@@ -383,8 +391,8 @@ class TextualWorkflowOutput(WorkflowOutput):
                             self.call_from_thread(self._set_widget_display, self.action_buttons, False)
 
                     if status == NodeStatus.AWAITING_CONFIRMATION.value:
-                        if node_id not in self.approved_nodes:
-                            self.call_from_thread(self._push_doubtful_node_screen, node_id)
+                        if node_id not in self.approved_nodes and node_id not in self.doubtful_node_queue:
+                            self.doubtful_node_queue.append(node_id)
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:
