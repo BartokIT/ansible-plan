@@ -192,6 +192,7 @@ class TextualWorkflowOutput(WorkflowOutput):
             self.details_table = None
             self._node_tree = None
             self.doubtful_node_queue = deque()
+            self.pending_confirmation_nodes = set()
 
         def compose(self) -> ComposeResult:
             yield Header()
@@ -277,6 +278,7 @@ class TextualWorkflowOutput(WorkflowOutput):
             else:
                 self.api_client.disapprove_node(node_id)
             self.approved_nodes.add(node_id)
+            self.pending_confirmation_nodes.remove(node_id)
             self._process_doubtful_queue()
 
         def _set_widget_display(self, widget, display):
@@ -392,7 +394,8 @@ class TextualWorkflowOutput(WorkflowOutput):
                             self.call_from_thread(self._set_widget_display, self.action_buttons, False)
 
                     if status == NodeStatus.AWAITING_CONFIRMATION.value:
-                        if node_id not in self.approved_nodes and node_id not in self.doubtful_node_queue:
+                        if node_id not in self.approved_nodes and node_id not in self.pending_confirmation_nodes:
+                            self.pending_confirmation_nodes.add(node_id)
                             self.doubtful_node_queue.append(node_id)
                             nodes_need_approval = True
 
