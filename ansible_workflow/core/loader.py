@@ -45,7 +45,7 @@ class WorkflowYamlLoader(WorkflowLoader):
     '''
     def __init__(self, workflow_file: str, logging_dir: str,
                  logging_level: str = None, input_templating: dict={},
-                 check_mode=False, verbosity=0):
+                 check_mode=False, verbosity=0, doubtful_mode=False):
         '''
         Initialize the loader
         Args:
@@ -59,7 +59,7 @@ class WorkflowYamlLoader(WorkflowLoader):
         '''
         self.__define_logger(logging_dir, logging_level)
         self.__workflow_file: string = workflow_file
-        self.__workflow: AnsibleWorkflow = AnsibleWorkflow(self.__workflow_file, logging_dir, logging_level)
+        self.__workflow: AnsibleWorkflow = AnsibleWorkflow(self.__workflow_file, logging_dir, logging_level, doubtful_mode)
         self._default_format_version: int = 1
         self.__check_mode: bool = check_mode
         self.__verbosity = verbosity

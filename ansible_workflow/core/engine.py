@@ -14,7 +14,7 @@ from .models import WorkflowStatus, NodeStatus, Node, PNode, WorkflowEventType, 
 
 
 class AnsibleWorkflow():
-    def __init__(self, workflow_file, logging_dir, log_level, filtered_nodes=None):
+    def __init__(self, workflow_file, logging_dir, log_level, doubtful_mode: bool = False, filtered_nodes=None):
         self.__graph: nx.DiGraph = nx.DiGraph()
         self.__original_graph: nx.DiGraph = nx.DiGraph()
         self.__running_status = WorkflowStatus.NOT_STARTED
@@ -31,6 +31,7 @@ class AnsibleWorkflow():
         self.__pause_event = threading.Event()
         self.__pause_event.set()
         self.__stopping = False
+        self.__doubtful_mode = doubtful_mode
 
     def get_validation_errors(self):
         return self._validation_errors
@@ -266,7 +267,14 @@ class AnsibleWorkflow():
                             if isinstance(next_node, PNode):
                                 # run a node
                                 self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.PRE_RUNNING, next_node)
-                                if not next_node.is_skipped():
+                                if self.__doubtful_mode:
+                                    next_node.set_status(NodeStatus.AWAITING_CONFIRMATION)
+                                    self.notify_event(
+                                        WorkflowEventType.NODE_EVENT,
+                                        NodeStatus.AWAITING_CONFIRMATION,
+                                        next_node
+                                    )
+                                elif not next_node.is_skipped():
                                     self.run_node(next_node_id)
                                 else:
                                     self.skip_node(next_node_id)
@@ -356,6 +364,30 @@ class AnsibleWorkflow():
         # Add node to running nodes so its successors can be processed
         self.add_running_node(node_id)
         self.__resume_event.set()
+
+    def approve_node(self, node_id: str):
+        node = self.get_node_object(node_id)
+        if not node or node.get_status() != NodeStatus.AWAITING_CONFIRMATION:
+            self._logger.warning(f"Node {node_id} cannot be approved.")
+            return
+
+        self._logger.info(f"Approving node {node_id}")
+        node.set_status(None)
+        self.run_node(node_id)
+
+    def disapprove_node(self, node_id: str):
+        node = self.get_node_object(node_id)
+        if not node or node.get_status() != NodeStatus.AWAITING_CONFIRMATION:
+            self._logger.warning(f"Node {node_id} cannot be disapproved.")
+            return
+
+        self._logger.info(f"Disapproving node {node_id}")
+        node.set_status(None)
+        node.set_skipped()
+        self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.SKIPPED, node)
+        # Add node to running nodes so its successors can be processed
+        self.add_running_node(node_id)
+
 
     def run(self, start_node: str = "_s", end_node: str = "_e", verify_only: bool = False):
         '''

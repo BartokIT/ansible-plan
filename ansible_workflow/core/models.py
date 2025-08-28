@@ -22,6 +22,7 @@ class NodeStatus(Enum):
     """ Define the character for the application"""
     RUNNING = 'running'
     PRE_RUNNING = 'pre_running'
+    AWAITING_CONFIRMATION = 'awaiting_confirmation'
     ENDED = 'ended'
     FAILED = 'failed'
     SKIPPED = 'skipped'
@@ -46,6 +47,7 @@ class Node():
         self._started_time: datetime = None
         self._ended_time: datetime = None
         self.__skipped = False
+        self._status: typing.Optional[NodeStatus] = None
 
     def get_id(self) -> str:
         return self.__id
@@ -58,6 +60,9 @@ class Node():
 
     def is_skipped(self):
         return self.__skipped
+
+    def set_status(self, status: NodeStatus):
+        self._status = status
 
     def __eq__(self, other):
         return self.__id == other.get_id()
@@ -89,6 +94,8 @@ class Node():
 
 class BNode(Node):
     def get_status(self):
+        if self._status:
+            return self._status
         return NodeStatus.ENDED
 
     def get_type(self):
@@ -148,6 +155,8 @@ class PNode(Node):
         self.__verbosity = verbosity
 
     def get_status(self):
+        if self._status:
+            return self._status
         if self.is_skipped():
             return NodeStatus.SKIPPED
         elif self.__thread is None:

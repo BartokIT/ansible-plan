@@ -86,6 +86,31 @@ class StopWorkflowScreen(ModalScreen):
             self.dismiss(None)
 
 
+class DoubtfulNodeScreen(ModalScreen):
+    """Screen with a dialog to approve or skip a node."""
+
+    def __init__(self, node_id: str, **kwargs):
+        super().__init__(**kwargs)
+        self.node_id = node_id
+
+    def compose(self) -> ComposeResult:
+        yield Container(
+            Label(f"Node [b]{self.node_id}[/b] is awaiting your confirmation.", id="question"),
+            Horizontal(
+                Button("Approve", variant="success", id="approve"),
+                Button("Skip", variant="primary", id="skip"),
+                id="buttons",
+            ),
+            id="dialog",
+        )
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "approve":
+            self.dismiss(True)
+        else:
+            self.dismiss(False)
+
+
 class NullHighlighter(Highlighter):
     def highlight(self, text):
         pass
@@ -145,10 +170,12 @@ class TextualWorkflowOutput(WorkflowOutput):
             self.node_data = {}
             self.graph = nx.DiGraph()
             self.spinner_icons = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
+            self.approved_nodes = set()
             self.status_icons = {
                 NodeStatus.NOT_STARTED.value: "○",
                 NodeStatus.PRE_RUNNING.value: "[yellow]…[/yellow]",
                 NodeStatus.RUNNING.value: "[yellow]○[/yellow]",
+                NodeStatus.AWAITING_CONFIRMATION.value: "[bold yellow]?[/]",
                 NodeStatus.ENDED.value: "[green]✔[/green]",
                 NodeStatus.FAILED.value: "[red]✖[/red]",
                 NodeStatus.SKIPPED.value: "[cyan]»[/cyan]",
@@ -233,6 +260,14 @@ class TextualWorkflowOutput(WorkflowOutput):
                 self.action_stop_workflow(stop_mode)
             else:
                 self.api_client.resume_workflow()
+
+        def check_doubtful_node(self, result: bool, node_id: str) -> None:
+            """Called when the DoubtfulNodeScreen is dismissed."""
+            if result:
+                self.api_client.approve_node(node_id)
+            else:
+                self.api_client.disapprove_node(node_id)
+            self.approved_nodes.add(node_id)
 
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
@@ -329,6 +364,10 @@ class TextualWorkflowOutput(WorkflowOutput):
                             action_buttons.display = True
                         else:
                             action_buttons.display = False
+
+                    if status == NodeStatus.AWAITING_CONFIRMATION.value:
+                        if node_id not in self.approved_nodes:
+                            self.push_screen(DoubtfulNodeScreen(node_id), lambda result: self.check_doubtful_node(result, node_id))
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:
