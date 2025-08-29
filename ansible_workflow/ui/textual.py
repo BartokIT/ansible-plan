@@ -18,7 +18,6 @@ from textual import work
 from textual.reactive import reactive
 from textual.theme import BUILTIN_THEMES
 from collections import deque
-from collections.abc import Mapping
 from textual.css.query import NoMatches
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -117,17 +116,6 @@ class NullHighlighter(Highlighter):
     def highlight(self, text):
         pass
 
-from rich.style import Style
-
-
-class WorkflowTree(Tree):
-    def render_label(self, node, base_style, style):
-        node_label = node._label.copy()
-        if isinstance(node.data, Mapping) and node.data.get('strategy') == 'parallel':
-            node_label.stylize(Style(bgcolor="dark_blue"))
-        return node_label
-
-
 class TextualWorkflowOutput(WorkflowOutput):
     _log_name = 'textual.log'
 
@@ -209,7 +197,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         def compose(self) -> ComposeResult:
             yield Header()
             with Horizontal():
-                yield WorkflowTree(self.workflow_filename, id="workflow_tree", classes="sidebar")
+                yield Tree(self.workflow_filename, id="workflow_tree", classes="sidebar")
                 with Vertical():
                     yield DataTable(id="node_details", show_cursor=False, show_header=False)
                     with Horizontal(id="action_buttons"):
@@ -359,7 +347,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                     icon = self.status_icons.get(child_node_data.get('status'), " ")
                     label = f"{icon} {child_id}"
 
-                child_tree_node = tree_node.add(label, data=child_node_data, allow_expand=allow_expand)
+                child_tree_node = tree_node.add(label, data=child_id, allow_expand=allow_expand)
                 self.tree_nodes[child_id] = child_tree_node
 
                 if self.graph.out_degree(child_id) > 0:
@@ -419,13 +407,13 @@ class TextualWorkflowOutput(WorkflowOutput):
                 self.stdout_watcher.cancel()
                 self.stdout_watcher = None
 
-            node_data = event.node.data
+            node_id = event.node.data
+            self.selected_node_id = node_id
+            node_data = self.node_data.get(node_id)
+
             if not node_data:
                 self.action_buttons.display = False
                 return
-
-            node_id = node_data.get('id')
-            self.selected_node_id = node_id
 
             self.details_table.clear()
             if not self.details_table.columns:
@@ -454,7 +442,8 @@ class TextualWorkflowOutput(WorkflowOutput):
                 if node_data['status'] == NodeStatus.RUNNING.value:
                     self.stdout_watcher = self.watch_stdout(node_id)
             elif node_data.get('type') == 'block':
-                 add_detail("Type", "Block")
+                add_detail("Type", "Block")
+                add_detail("Strategy", node_data.get('strategy', 'parallel'))
 
             if node_data.get('status') == NodeStatus.FAILED.value:
                 self.action_buttons.display = True
