@@ -480,7 +480,11 @@ class WorkflowYamlLoader(WorkflowLoader):
                                    (indentation, pnode_parameters, level, strategy, block_id))
 
             # the node specification is added
-            self.__workflow.add_node(gnode, dict(level=level, block=dict(strategy=strategy, block_id=block_id)))
+            if 'block' in inode:
+                node_data_strategy = inode.get('strategy', 'parallel')
+            else:
+                node_data_strategy = strategy
+            self.__workflow.add_node(gnode, dict(level=level, block=dict(strategy=node_data_strategy, block_id=block_id)))
 
             # saves also original tree
             self.__workflow.get_original_graph().add_node(gnode_id)
