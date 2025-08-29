@@ -342,7 +342,9 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                 allow_expand = node_type == 'block'
                 if node_type == 'block':
-                    label = f"[b]{child_id}[/b]"
+                    strategy = child_node_data.get('strategy', 'parallel')
+                    strategy_indicator = "[S]" if strategy == 'serial' else "[P]"
+                    label = f"{strategy_indicator} [b]{child_id}[/b]"
                 else:
                     icon = self.status_icons.get(child_node_data.get('status'), " ")
                     label = f"{icon} {child_id}"
@@ -380,7 +382,9 @@ class TextualWorkflowOutput(WorkflowOutput):
                         # The spinner, if it exists, will see the state change and stop itself.
                         # We just set the final label.
                         if node.get('type') == 'block':
-                            label = f"[b]{node_id}[/b]"
+                            strategy = node.get('strategy', 'parallel')
+                            strategy_indicator = "[S]" if strategy == 'serial' else "[P]"
+                            label = f"{strategy_indicator} [b]{node_id}[/b]"
                         else:
                             icon = self.status_icons.get(status, " ")
                             label = f"{icon} {node_id}"
@@ -504,7 +508,9 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                 # Use the original node_data for static info like type and id
                 if node_data.get('type') == 'block':
-                    label = f"{icon} [b]{node_id}[/b]"
+                    strategy = self.node_data.get(node_id, {}).get('strategy', 'parallel')
+                    strategy_indicator = "[S]" if strategy == 'serial' else "[P]"
+                    label = f"{icon} {strategy_indicator} [b]{node_id}[/b]"
                 else:
                     label = f"{icon} {node_id}"
 
