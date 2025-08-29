@@ -66,7 +66,7 @@ In case of failure of some playbooks inside the workflow, the tool offers an int
 
 It is also possible to bypass this interactive prompt and automatically fail the workflow by adding the `--no-interactive-retry` or `-nir` command-line flag.
 
-Here is a demonstration of a failing workflow being handled in non-interactive mode:
+Here is an example of the final output of a failing workflow being handled in non-interactive mode:
 
 ![Ansible Workflow Demo](docs/ansible-workflow-demo.svg)
 
