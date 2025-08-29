@@ -116,6 +116,17 @@ class NullHighlighter(Highlighter):
     def highlight(self, text):
         pass
 
+from rich.style import Style
+
+
+class WorkflowTree(Tree):
+    def render_label(self, node, base_style, style):
+        node_label = node._label.copy()
+        if node.data and node.data.get('strategy') == 'parallel':
+            node_label.stylize(Style(bgcolor="dark_blue"))
+        return node_label
+
+
 class TextualWorkflowOutput(WorkflowOutput):
     _log_name = 'textual.log'
 
@@ -197,7 +208,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         def compose(self) -> ComposeResult:
             yield Header()
             with Horizontal():
-                yield Tree(self.workflow_filename, id="workflow_tree", classes="sidebar")
+                yield WorkflowTree(self.workflow_filename, id="workflow_tree", classes="sidebar")
                 with Vertical():
                     yield DataTable(id="node_details", show_cursor=False, show_header=False)
                     with Horizontal(id="action_buttons"):
@@ -342,14 +353,12 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                 allow_expand = node_type == 'block'
                 if node_type == 'block':
-                    strategy = child_node_data.get('strategy', 'parallel')
-                    strategy_indicator = "[S]" if strategy == 'serial' else "[P]"
-                    label = f"{strategy_indicator} [b]{child_id}[/b]"
+                    label = f"[b]{child_id}[/b]"
                 else:
                     icon = self.status_icons.get(child_node_data.get('status'), " ")
                     label = f"{icon} {child_id}"
 
-                child_tree_node = tree_node.add(label, data=child_id, allow_expand=allow_expand)
+                child_tree_node = tree_node.add(label, data=child_node_data, allow_expand=allow_expand)
                 self.tree_nodes[child_id] = child_tree_node
 
                 if self.graph.out_degree(child_id) > 0:
@@ -382,9 +391,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                         # The spinner, if it exists, will see the state change and stop itself.
                         # We just set the final label.
                         if node.get('type') == 'block':
-                            strategy = node.get('strategy', 'parallel')
-                            strategy_indicator = "[S]" if strategy == 'serial' else "[P]"
-                            label = f"{strategy_indicator} [b]{node_id}[/b]"
+                            label = f"[b]{node_id}[/b]"
                         else:
                             icon = self.status_icons.get(status, " ")
                             label = f"{icon} {node_id}"
@@ -411,13 +418,13 @@ class TextualWorkflowOutput(WorkflowOutput):
                 self.stdout_watcher.cancel()
                 self.stdout_watcher = None
 
-            node_id = event.node.data
-            self.selected_node_id = node_id
-            node_data = self.node_data.get(node_id)
-
+            node_data = event.node.data
             if not node_data:
                 self.action_buttons.display = False
                 return
+
+            node_id = node_data.get('id')
+            self.selected_node_id = node_id
 
             self.details_table.clear()
             if not self.details_table.columns:
@@ -508,9 +515,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                 # Use the original node_data for static info like type and id
                 if node_data.get('type') == 'block':
-                    strategy = self.node_data.get(node_id, {}).get('strategy', 'parallel')
-                    strategy_indicator = "[S]" if strategy == 'serial' else "[P]"
-                    label = f"{icon} {strategy_indicator} [b]{node_id}[/b]"
+                    label = f"{icon} [b]{node_id}[/b]"
                 else:
                     label = f"{icon} {node_id}"
 
