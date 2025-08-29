@@ -18,6 +18,7 @@ from textual import work
 from textual.reactive import reactive
 from textual.theme import BUILTIN_THEMES
 from collections import deque
+from collections.abc import Mapping
 from textual.css.query import NoMatches
 from .base import WorkflowOutput
 from ..core.models import NodeStatus
@@ -122,7 +123,7 @@ from rich.style import Style
 class WorkflowTree(Tree):
     def render_label(self, node, base_style, style):
         node_label = node._label.copy()
-        if node.data and node.data.get('strategy') == 'parallel':
+        if isinstance(node.data, Mapping) and node.data.get('strategy') == 'parallel':
             node_label.stylize(Style(bgcolor="dark_blue"))
         return node_label
 
