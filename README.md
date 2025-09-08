@@ -1,6 +1,6 @@
 # workflow-for-ansible
 
-A tool to launch workflows from command line to emulate what is done from Ansible® AWX workflow templates
+A tool to launch workflows from command line to emulate what is done from Red Hat Ansible® AWX workflow templates
 
 
 ## Prerequisites
