@@ -1,33 +1,21 @@
-# Ansible Workflow
+# workflow-for-ansible
 
-A tool to launch worflows from command line to emulate what is done from Ansible AWX workflow templates.
+A tool to launch workflows from command line to emulate what is done from Ansible® AWX workflow templates
 
-## Getting Started
 
-### Prerequisites
+## Prerequisites
 
-This tool requires Python 3 and `pip` to be installed.
+Install the dependencies with the command:
 
-### Installation
-
-1.  Clone the repository:
-    ```bash
-    git clone https://github.com/your-username/ansible-workflow.git
-    cd ansible-workflow
-    ```
-2.  Install the dependencies:
-    ```bash
     pip install -r requirements.txt
-    ```
 
 ## Usage
 
-At a minimum, a workflow file can be launched with the following command:
+At minimum a workflow file cam be launched with the following command:
 
 ```bash
-python -m ansible_workflow workflow_file.yml
+workflow-for-ansible workflow_file.yml
 ```
-
 ### Verify workflow file
 To only check the syntax of the workflow file, you can just add the parameter `--verify-only`.
 
@@ -35,7 +23,7 @@ To only check the syntax of the workflow file, you can just add the parameter `-
 To launch all the playbooks inside the workflow in check mode, it is possible to specify the `--check` option.
 
 ### Logging
-Various options can be used to increase the logging capacity. Here are the possible options:
+Various options can be used to increase the logging capacity. Here the possible options.
 
 | Parameter              | Description                                                                                         |
 | :---                   | :---                                                                                                |
@@ -61,18 +49,13 @@ In the table below the options that modify the execution flow.
 | --input-templating INPUT_TEMPLATING  / -it INPUT_TEMPLATING    | Allow to specify template variables in the form KEY=VALUE from the command line. Multiple instances of this parameter can be set        |
 | --extra-vars                            | Set additional variables to be bassed to playbooks from the command line                |
 
-## Handling Failing Workflows
-In case of failure of some playbooks inside the workflow, the tool offers an interactive prompt to retry, fail, or skip the failing node.
-
-It is also possible to bypass this interactive prompt and automatically fail the workflow by adding the `--no-interactive-retry` or `-nir` command-line flag.
-
-Here is an example of the final output of a failing workflow being handled in non-interactive mode:
-
-![Ansible Workflow Demo](docs/ansible-workflow-demo.svg)
+## Interactive retry
+In case of failure of some playbooks inside the workflow, the workflow ask if the playbook need to be relaunched.
+It is possible to avoid this questions and fail the entiry workflow by adding the command `--no-interactive-retry` or `-nir`.
 
 ## Workflow file
 
-Some examples can be found in the `examples` directory.
+Some examples can be found in the examples directory.
 
 The workflow format is in a YAML file like the following.
 
@@ -425,8 +408,8 @@ block:
     import_playbook: playbooks/first.yml
     limit: "{{ to_override }}"
 
+
+---
+*Ansible® is a registered trademark of Red Hat, Inc. in the United States and other countries.*
+
 ```
-
-## License
-
-This project is licensed under the GNU AGPLv3 License - see the [LICENSE](LICENSE) file for details.
