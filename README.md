@@ -1,6 +1,6 @@
-# ansible-workflow
+# workflow-for-ansible
 
-A tool to launch worflows from command line to emulate what is done from Ansible AWX workflow templates
+A tool to launch workflows from command line to emulate what is done from Ansible® AWX workflow templates
 
 
 ## Prerequisites
@@ -14,7 +14,7 @@ Install the dependencies with the command:
 At minimum a workflow file cam be launched with the following command:
 
 ```bash
-ansible-workflow workflow_file.yml
+workflow-for-ansible workflow_file.yml
 ```
 ### Verify workflow file
 To only check the syntax of the workflow file, you can just add the parameter `--verify-only`.
@@ -52,8 +52,6 @@ In the table below the options that modify the execution flow.
 ## Interactive retry
 In case of failure of some playbooks inside the workflow, the workflow ask if the playbook need to be relaunched.
 It is possible to avoid this questions and fail the entiry workflow by adding the command `--no-interactive-retry` or `-nir`.
-
-![Interactive retry sample](docs/ansible_workflow_1.gif)
 
 ## Workflow file
 
@@ -409,5 +407,9 @@ block:
   - id: b1
     import_playbook: playbooks/first.yml
     limit: "{{ to_override }}"
+
+
+---
+*Ansible® is a registered trademark of Red Hat, Inc. in the United States and other countries.*
 
 ```

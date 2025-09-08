@@ -1,8 +1,8 @@
 .eggs
-ansible_workflow.egg-info
+ansible_plan.egg-info
 build
 dist
-ansible_workflow/__pycache__
+ansible_plan/__pycache__
 AUTHORS
 ChangeLog
 .pyc
