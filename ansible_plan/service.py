@@ -14,7 +14,7 @@ class StopWorkflowRequest(BaseModel):
 
 from .core.loader import WorkflowYamlLoader
 from .core.engine import AnsibleWorkflow
-from .core.models import NodeStatus, WorkflowStatus, PNode
+from .core.models import NodeStatus, WorkflowStatus, PNode, LNode, CNode
 from .core.exceptions import (
     AnsibleWorkflowLoadingError,
     AnsibleWorkflowValidationError,
@@ -154,6 +154,11 @@ def get_workflow_nodes():
                     "reference": node_obj.get_reference(),
                 })
                 node_info.update(node_obj.get_telemetry())
+            elif isinstance(node_obj, (LNode, CNode)):
+                node_info.update({
+                    "description": node_obj.get_description(),
+                    "reference": node_obj.get_reference(),
+                })
             nodes_data.append(node_info)
         return nodes_data
 

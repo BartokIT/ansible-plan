@@ -10,7 +10,7 @@ import os
 import logging
 import logging.handlers
 from .exceptions import AnsibleWorkflowDuplicateNodeId, AnsibleWorkflowPlaybookNodeCheck
-from .models import WorkflowStatus, NodeStatus, Node, PNode, WorkflowEventType, WorkflowEvent, WorkflowListener
+from .models import WorkflowStatus, NodeStatus, Node, PNode, CNode, WorkflowEventType, WorkflowEvent, WorkflowListener
 
 
 class AnsibleWorkflow():
@@ -280,6 +280,9 @@ class AnsibleWorkflow():
                                     self.skip_node(next_node_id)
 
 
+            elif status == NodeStatus.AWAITING_CONFIRMATION:
+                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.AWAITING_CONFIRMATION, node)
+                self.__running_nodes.remove(node_id)
             elif status == NodeStatus.STOPPED:
                 self._logger.info(f"Node {node_id} stopped. Setting end time.")
                 node.set_ended_time(datetime.now())
@@ -373,7 +376,11 @@ class AnsibleWorkflow():
 
         self._logger.info(f"Approving node {node_id}")
         node.set_status(None)
-        self.run_node(node_id)
+        if isinstance(node, CNode):
+            node.set_status(NodeStatus.ENDED)
+            self.add_running_node(node_id)
+        else:
+            self.run_node(node_id)
 
     def disapprove_node(self, node_id: str):
         node = self.get_node_object(node_id)

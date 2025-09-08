@@ -87,16 +87,17 @@ class StopWorkflowScreen(ModalScreen):
             self.dismiss(None)
 
 
-class DoubtfulNodeScreen(ModalScreen):
+class ConfirmationScreen(ModalScreen):
     """Screen with a dialog to approve or skip a node."""
 
-    def __init__(self, node_id: str, **kwargs):
+    def __init__(self, node_id: str, message: str, **kwargs):
         super().__init__(**kwargs)
         self.node_id = node_id
+        self.message = message
 
     def compose(self) -> ComposeResult:
         yield Container(
-            Label(f"Node [b]{self.node_id}[/b] is awaiting your confirmation.", id="question"),
+            Label(self.message, id="question"),
             Horizontal(
                 Button("Approve", variant="success", id="approve"),
                 Button("Skip", variant="primary", id="skip"),
@@ -271,29 +272,29 @@ class TextualWorkflowOutput(WorkflowOutput):
             else:
                 self.api_client.resume_workflow()
 
-        def check_doubtful_node(self, result: bool, node_id: str) -> None:
-            """Called when the DoubtfulNodeScreen is dismissed."""
+        def check_confirmation(self, result: bool, node_id: str) -> None:
+            """Called when the ConfirmationScreen is dismissed."""
             if result:
                 self.api_client.approve_node(node_id)
             else:
                 self.api_client.disapprove_node(node_id)
             self.approved_nodes.add(node_id)
             self.pending_confirmation_nodes.remove(node_id)
-            self._process_doubtful_queue()
+            self._process_confirmation_queue()
 
         def _set_widget_display(self, widget, display):
             widget.display = display
 
-        def _push_doubtful_node_screen(self, node_id):
+        def _push_confirmation_screen(self, node_id: str, message: str):
             self.push_screen(
-                DoubtfulNodeScreen(node_id),
-                lambda result: self.check_doubtful_node(result, node_id)
+                ConfirmationScreen(node_id, message),
+                lambda result: self.check_confirmation(result, node_id)
             )
 
-        def _process_doubtful_queue(self):
+        def _process_confirmation_queue(self):
             if not self.is_modal and self.doubtful_node_queue:
-                node_id = self.doubtful_node_queue.popleft()
-                self._push_doubtful_node_screen(node_id)
+                node_id, message = self.doubtful_node_queue.popleft()
+                self._push_confirmation_screen(node_id, message)
 
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
@@ -343,6 +344,8 @@ class TextualWorkflowOutput(WorkflowOutput):
                 allow_expand = node_type == 'block'
                 if node_type == 'block':
                     label = f"[b]{child_id}[/b]"
+                elif node_type == 'label':
+                    label = f"🏷️ {child_id}"
                 else:
                     icon = self.status_icons.get(child_node_data.get('status'), " ")
                     label = f"{icon} {child_id}"
@@ -396,11 +399,14 @@ class TextualWorkflowOutput(WorkflowOutput):
                     if status == NodeStatus.AWAITING_CONFIRMATION.value:
                         if node_id not in self.approved_nodes and node_id not in self.pending_confirmation_nodes:
                             self.pending_confirmation_nodes.add(node_id)
-                            self.doubtful_node_queue.append(node_id)
+                            message = f"Node [b]{node_id}[/b] is awaiting your confirmation."
+                            if node.get('type') == 'checkpoint':
+                                message = f"Checkpoint [b]{node_id}[/b] reached. Proceed?"
+                            self.doubtful_node_queue.append((node_id, message))
                             nodes_need_approval = True
 
             if nodes_need_approval:
-                self.call_from_thread(self._process_doubtful_queue)
+                self.call_from_thread(self._process_confirmation_queue)
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:
@@ -444,6 +450,12 @@ class TextualWorkflowOutput(WorkflowOutput):
             elif node_data.get('type') == 'block':
                 add_detail("Type", "Block")
                 add_detail("Strategy", node_data.get('strategy', 'parallel'))
+            elif node_data.get('type') in ['label', 'checkpoint']:
+                add_detail("Type", node_data.get('type').capitalize())
+                if node_data.get('description'):
+                    add_detail("Description", node_data.get('description'))
+                if node_data.get('reference'):
+                    add_detail("Reference", node_data.get('reference'))
 
             if node_data.get('status') == NodeStatus.FAILED.value:
                 self.action_buttons.display = True

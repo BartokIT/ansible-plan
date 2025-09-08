@@ -255,6 +255,48 @@ class PNode(Node):
                                                                 quiet=True)
 
 
+class LNode(Node):
+    def __init__(self, id, description='', reference=''):
+        super(LNode, self).__init__(id)
+        self.__description = description
+        self.__reference = reference
+
+    def get_status(self):
+        if self._status:
+            return self._status
+        return NodeStatus.ENDED
+
+    def get_type(self):
+        return 'label'
+
+    def get_description(self):
+        return self.__description
+
+    def get_reference(self):
+        return self.__reference
+
+
+class CNode(Node):
+    def __init__(self, id, description='', reference=''):
+        super(CNode, self).__init__(id)
+        self.__description = description
+        self.__reference = reference
+
+    def get_status(self):
+        if self._status:
+            return self._status
+        return NodeStatus.AWAITING_CONFIRMATION
+
+    def get_type(self):
+        return 'checkpoint'
+
+    def get_description(self):
+        return self.__description
+
+    def get_reference(self):
+        return self.__reference
+
+
 class WorkflowEventType(Enum):
     """ Define the return codes for the application"""
     NODE_EVENT = 1

@@ -10,13 +10,14 @@ import jinja2
 import copy
 import sys
 import yaml
+import jsonschema
 from ansible.plugins.filter.core import FilterModule
 from .exceptions import (AnsibleWorkflowConfigurationError, AnsibleWorkflowImportMissingBlock, AnsibleWorkflowRecursiveImport,
                          AnsibleWorkflowUnsupportedVersion, AnsibleWorkflowValidationError,
                          AnsibleWorkflowVaultScriptNotExists,
                          AnsibleWorkflowVaultScriptNotSet, AnsibleWorkflowYAMLNotValid)
 from .engine import AnsibleWorkflow
-from .models import Node, PNode, BNode
+from .models import Node, PNode, BNode, LNode, CNode
 from .validation import validate_workflow
 from collections.abc import Mapping
 from enum import Enum
@@ -438,46 +439,52 @@ class WorkflowYamlLoader(WorkflowLoader):
                 gnode = BNode(gnode_id)
                 block_sub_nodes = self._parse_workflow_v1(inode['block'], [gnode, ], inode.get('strategy', 'parallel'), defaults, options, level + 1, gnode_id)
             else:
-                # set the playbook
-                playbook = inode['import_playbook']
-                # init the parameters input
-                pnode_parameters = dict(id=gnode_id, playbook=playbook, artifact_dir=self._logging_dir, check_mode=self.__check_mode)
+                gnode = None
+                if inode.get('label', False):
+                    gnode = LNode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
+                elif inode.get('checkpoint', False):
+                    gnode = CNode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
+                elif inode.get('import_playbook', False):
+                    # set the playbook
+                    playbook = inode['import_playbook']
+                    # init the parameters input
+                    pnode_parameters = dict(id=gnode_id, playbook=playbook, artifact_dir=self._logging_dir, check_mode=self.__check_mode)
 
-                # set all the inode parameters or if not set defaults parameters
-                for parameter, default_or_inode_key in dict(inventory="inventory",
-                                                            extra_vars="vars",
-                                                            vault_ids="vault_ids",
-                                                            project_path="project_path",
-                                                            limit="limit",
-                                                            verbosity="verbosity",
-                                                            description="description",
-                                                            reference="reference").items():
-                    if inode.get(default_or_inode_key):
-                        pnode_parameters[parameter] = inode[default_or_inode_key]
-                    elif defaults.get(default_or_inode_key):
-                        pnode_parameters[parameter] = defaults[default_or_inode_key]
+                    # set all the inode parameters or if not set defaults parameters
+                    for parameter, default_or_inode_key in dict(inventory="inventory",
+                                                                extra_vars="vars",
+                                                                vault_ids="vault_ids",
+                                                                project_path="project_path",
+                                                                limit="limit",
+                                                                verbosity="verbosity",
+                                                                description="description",
+                                                                reference="reference").items():
+                        if inode.get(default_or_inode_key):
+                            pnode_parameters[parameter] = inode[default_or_inode_key]
+                        elif defaults.get(default_or_inode_key):
+                            pnode_parameters[parameter] = defaults[default_or_inode_key]
 
-                # prepend global path to project and inventory
-                if options.get("global_path", False):
-                    if not os.path.isabs(pnode_parameters["project_path"]):
-                        pnode_parameters["project_path"] = os.path.join(options["global_path"], pnode_parameters["project_path"])
-                    if not os.path.isabs(pnode_parameters["inventory"]):
-                        pnode_parameters["inventory"] = os.path.join(options["global_path"], pnode_parameters["inventory"])
+                    # prepend global path to project and inventory
+                    if options.get("global_path", False):
+                        if not os.path.isabs(pnode_parameters["project_path"]):
+                            pnode_parameters["project_path"] = os.path.join(options["global_path"], pnode_parameters["project_path"])
+                        if not os.path.isabs(pnode_parameters["inventory"]):
+                            pnode_parameters["inventory"] = os.path.join(options["global_path"], pnode_parameters["inventory"])
 
-                # add the vault script to all vault id
-                vault_ids = []
+                    # add the vault script to all vault id
+                    vault_ids = []
 
-                if len(pnode_parameters.get("vault_ids", [])) > 0 and options['vault_script'] is None:
-                    raise AnsibleWorkflowVaultScriptNotSet("Vault script not set but vault IDs specified for node %s" % (gnode_id))
+                    if len(pnode_parameters.get("vault_ids", [])) > 0 and options['vault_script'] is None:
+                        raise AnsibleWorkflowVaultScriptNotSet("Vault script not set but vault IDs specified for node %s" % (gnode_id))
 
-                for vault_id in pnode_parameters.get("vault_ids", []):
-                    vault_ids.append("%s@%s" % (vault_id, options["vault_script"]))
-                pnode_parameters["vault_ids"] = vault_ids
+                    for vault_id in pnode_parameters.get("vault_ids", []):
+                        vault_ids.append("%s@%s" % (vault_id, options["vault_script"]))
+                    pnode_parameters["vault_ids"] = vault_ids
 
-                gnode = PNode(**pnode_parameters)
-                gnode.set_logger(self._logger)
-                self._logger.debug("---- %s added node: %s, level: %s, block type: %s, block id: %s" %
-                                   (indentation, pnode_parameters, level, strategy, block_id))
+                    gnode = PNode(**pnode_parameters)
+                    gnode.set_logger(self._logger)
+                    self._logger.debug("---- %s added node: %s, level: %s, block type: %s, block id: %s" %
+                                    (indentation, pnode_parameters, level, strategy, block_id))
 
             # the node specification is added
             self.__workflow.add_node(gnode, dict(level=level, block=dict(strategy=strategy, block_id=block_id)))
