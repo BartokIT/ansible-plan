@@ -442,7 +442,8 @@ class TextualWorkflowOutput(WorkflowOutput):
                 if node_data['status'] == NodeStatus.RUNNING.value:
                     self.stdout_watcher = self.watch_stdout(node_id)
             elif node_data.get('type') == 'block':
-                 add_detail("Type", "Block")
+                add_detail("Type", "Block")
+                add_detail("Strategy", node_data.get('strategy', 'parallel'))
 
             if node_data.get('status') == NodeStatus.FAILED.value:
                 self.action_buttons.display = True

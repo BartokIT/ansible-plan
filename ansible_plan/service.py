@@ -130,6 +130,7 @@ def get_workflow_nodes():
             return []
 
         nodes_data = []
+        all_node_datas = current_workflow.get_node_datas()
         for node_id in current_workflow.get_nodes():
             node_obj = current_workflow.get_node_object(node_id)
             status = node_obj.get_status()
@@ -138,6 +139,12 @@ def get_workflow_nodes():
                 "status": status.value if hasattr(status, 'value') else status,
                 "type": node_obj.get_type(),
             }
+
+            if node_info['type'] == 'block':
+                node_data = all_node_datas.get(node_id, {})
+                if 'block' in node_data and 'strategy' in node_data['block']:
+                    node_info['strategy'] = node_data['block']['strategy']
+
             if isinstance(node_obj, PNode):
                 node_info.update({
                     "playbook": node_obj.get_playbook(),

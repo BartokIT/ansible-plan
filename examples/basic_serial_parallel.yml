@@ -1,0 +1,31 @@
+---
+options:
+  vault_script: vault_script_test.py
+defaults:
+  inventory: inventory.ini
+  verbosity: 4
+workflow:
+  - id: serial
+    strategy: serial
+    block:
+      - id: 1.1
+        import_playbook: playbooks/first.yml
+        limit: second_hostname,first_hostname
+      - id: 1.2
+        import_playbook: playbooks/second.yml
+      - id: 1.3
+        import_playbook: playbooks/third.yml
+      - id: 1.4
+        import_playbook: playbooks/third.yml
+  - id: parallel
+    strategy: parallel
+    block:
+      - id: 2.1
+        import_playbook: playbooks/third.yml
+        vault_ids:
+          - V1
+      - id: 2.2
+        import_playbook: playbooks/first.yml
+        limit: second_hostname,first_hostname
+      - id: 2.3
+        import_playbook: playbooks/fourth.yml
