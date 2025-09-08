@@ -1,0 +1,29 @@
+---
+options:
+  vault_script: vault_script_test.py
+defaults:
+  inventory: inventory.ini
+  verbosity: 4
+workflow:
+  - id: verysupernode1
+    block:
+      - id: verysupernode1verysupernode2
+        import_playbook: playbooks/first.yml
+        limit: second_hostname,first_hostname
+      - id: verysupernode1verysupernode2verysupernode1verysupernode2
+        import_playbook: playbooks/second.yml
+  - id: 2
+    project_path: project1
+    import_playbook: playbooks/project1.yml
+  - id: 3
+    import_playbook: playbooks/encrypted.yml
+    vault_ids:
+      - V1
+  - id: 4
+    block:
+      - id: 4.1
+        import_playbook: playbooks/encrypted.yml
+        vault_ids:
+          - V1
+      - id: 4.2
+        import_playbook: playbooks/fourth.yml

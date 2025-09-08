@@ -77,7 +77,7 @@ def check_and_start_backend(logger):
             popen_kwargs['start_new_session'] = True
 
         process = subprocess.Popen(
-            [sys.executable, "-m", "uvicorn", "ansible_workflow.service:app", "--port", "8001"],
+            [sys.executable, "-m", "uvicorn", "ansible_plan.service:app", "--port", "8001"],
             **popen_kwargs
         )
 
