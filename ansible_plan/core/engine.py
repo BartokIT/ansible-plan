@@ -249,7 +249,9 @@ class AnsibleWorkflow():
             status = node.get_status()
             self._logger.debug(f"__run_step: processing node {node_id} with status {status}")
             # if current node is ended search for next nodes
-            if status in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
+            if isinstance(node, CNode) and status == NodeStatus.RUNNING:
+                node.set_status(NodeStatus.ENDED)
+            elif status in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
                 self._logger.info(f"Node {node_id} finished with status {status}. Setting end time.")
                 self.__running_nodes.remove(node_id)
                 if not node.is_skipped():
@@ -377,7 +379,7 @@ class AnsibleWorkflow():
         self._logger.info(f"Approving node {node_id}")
         node.set_status(None)
         if isinstance(node, CNode):
-            node.set_status(NodeStatus.ENDED)
+            node.set_status(NodeStatus.RUNNING)
             self.add_running_node(node_id)
         else:
             self.run_node(node_id)

@@ -1,0 +1,44 @@
+defaults:
+  inventory: inventory.ini
+
+workflow:
+  - id: initial_setup
+    strategy: serial
+    block:
+      - id: setup_label
+        description: "This block contains the initial setup steps."
+      - id: first_checkpoint
+        checkpoint: true
+        description: "Do you want to start the main installation process?"
+
+  - id: main_installation
+    strategy: parallel
+    block:
+      - id: install_web_server
+        import_playbook: playbooks/first.yml
+        reference: "web_server_team"
+      - id: install_db_server
+        import_playbook: playbooks/second.yml
+        reference: "db_team"
+      - id: configuration_checkpoint
+        checkpoint: true
+        description: "Web and DB servers installed. Proceed with configuration?"
+
+  - id: final_configuration
+    strategy: serial
+    block:
+      - id: configure_web_server
+        import_playbook: playbooks/third.yml
+        reference: "web_server_team"
+      - id: configure_db_server
+        import_playbook: playbooks/fourth.yml
+        reference: "db_team"
+      - id: final_verification
+        block:
+          - id: verification_label
+            description: "Final verification steps."
+          - id: verify_web_server
+            import_playbook: playbooks/fifth.yml
+          - id: final_checkpoint
+            checkpoint: true
+            description: "All steps completed. Do you want to finish the workflow?"

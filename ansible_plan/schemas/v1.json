@@ -185,30 +185,6 @@
                             "description": "Identifier for the node inside the workflow",
                             "type": ["number", "string"]
                         },
-                        "label": {
-                            "description": "A label node",
-                            "type": "boolean"
-                        },
-                        "description": {
-                            "description": "Describes what the node does",
-                            "type": "string"
-                        },
-                        "reference": {
-                            "description": "Tells who is the owner of the task",
-                            "type": "string"
-                        }
-                    },
-                    "additionalProperties": false,
-                    "required": [
-                        "label"
-                    ]
-                },
-                {
-                    "properties": {
-                        "id": {
-                            "description": "Identifier for the node inside the workflow",
-                            "type": ["number", "string"]
-                        },
                         "checkpoint": {
                             "description": "A checkpoint node",
                             "type": "boolean"
@@ -226,6 +202,30 @@
                     "required": [
                         "checkpoint"
                     ]
+                },
+                {
+                    "properties": {
+                        "id": {
+                            "description": "Identifier for the node inside the workflow",
+                            "type": ["number", "string"]
+                        },
+                        "description": {
+                            "description": "Describes what the node does",
+                            "type": "string"
+                        },
+                        "reference": {
+                            "description": "Tells who is the owner of the task",
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "not": {
+                        "anyOf": [
+                            { "required": ["import_playbook"] },
+                            { "required": ["block"] },
+                            { "required": ["checkpoint"] }
+                        ]
+                    }
                 }
             ]
         }

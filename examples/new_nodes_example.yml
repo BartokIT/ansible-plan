@@ -4,7 +4,6 @@ workflow:
   - id: start
     block:
       - id: my_label
-        label: true
         description: "This is a label node."
       - id: my_checkpoint
         checkpoint: true

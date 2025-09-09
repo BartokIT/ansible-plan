@@ -87,7 +87,7 @@ class StopWorkflowScreen(ModalScreen):
             self.dismiss(None)
 
 
-class ConfirmationScreen(ModalScreen):
+class DoubtfulNodeScreen(ModalScreen):
     """Screen with a dialog to approve or skip a node."""
 
     def __init__(self, node_id: str, message: str, **kwargs):
@@ -272,29 +272,29 @@ class TextualWorkflowOutput(WorkflowOutput):
             else:
                 self.api_client.resume_workflow()
 
-        def check_confirmation(self, result: bool, node_id: str) -> None:
-            """Called when the ConfirmationScreen is dismissed."""
+        def check_doubtful_node(self, result: bool, node_id: str) -> None:
+            """Called when the DoubtfulNodeScreen is dismissed."""
             if result:
                 self.api_client.approve_node(node_id)
             else:
                 self.api_client.disapprove_node(node_id)
             self.approved_nodes.add(node_id)
             self.pending_confirmation_nodes.remove(node_id)
-            self._process_confirmation_queue()
+            self._process_doubtful_queue()
 
         def _set_widget_display(self, widget, display):
             widget.display = display
 
-        def _push_confirmation_screen(self, node_id: str, message: str):
+        def _push_doubtful_node_screen(self, node_id: str, message: str):
             self.push_screen(
-                ConfirmationScreen(node_id, message),
-                lambda result: self.check_confirmation(result, node_id)
+                DoubtfulNodeScreen(node_id, message),
+                lambda result: self.check_doubtful_node(result, node_id)
             )
 
-        def _process_confirmation_queue(self):
+        def _process_doubtful_queue(self):
             if not self.is_modal and self.doubtful_node_queue:
                 node_id, message = self.doubtful_node_queue.popleft()
-                self._push_confirmation_screen(node_id, message)
+                self._push_doubtful_node_screen(node_id, message)
 
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
@@ -406,7 +406,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                             nodes_need_approval = True
 
             if nodes_need_approval:
-                self.call_from_thread(self._process_confirmation_queue)
+                self.call_from_thread(self._process_doubtful_queue)
 
         def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
             if self.stdout_watcher:

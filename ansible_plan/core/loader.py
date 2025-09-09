@@ -439,12 +439,7 @@ class WorkflowYamlLoader(WorkflowLoader):
                 gnode = BNode(gnode_id)
                 block_sub_nodes = self._parse_workflow_v1(inode['block'], [gnode, ], inode.get('strategy', 'parallel'), defaults, options, level + 1, gnode_id)
             else:
-                gnode = None
-                if inode.get('label', False):
-                    gnode = LNode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
-                elif inode.get('checkpoint', False):
-                    gnode = CNode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
-                elif inode.get('import_playbook', False):
+                if 'import_playbook' in inode:
                     # set the playbook
                     playbook = inode['import_playbook']
                     # init the parameters input
@@ -485,6 +480,10 @@ class WorkflowYamlLoader(WorkflowLoader):
                     gnode.set_logger(self._logger)
                     self._logger.debug("---- %s added node: %s, level: %s, block type: %s, block id: %s" %
                                     (indentation, pnode_parameters, level, strategy, block_id))
+                elif inode.get('checkpoint', False):
+                    gnode = CNode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
+                else: # It's a label node
+                    gnode = LNode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
 
             # the node specification is added
             self.__workflow.add_node(gnode, dict(level=level, block=dict(strategy=strategy, block_id=block_id)))
