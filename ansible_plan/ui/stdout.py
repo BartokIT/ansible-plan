@@ -102,9 +102,12 @@ class StdoutWorkflowOutput(WorkflowOutput):
                         self.handle_retry(node)
                         found_failed_node_to_prompt = True
 
-                if node['status'] == NodeStatus.AWAITING_CONFIRMATION.value and self.__doubtful_mode:
+                if node['status'] == NodeStatus.AWAITING_CONFIRMATION.value:
                     if node['id'] not in self.approved_nodes:
-                        self.handle_doubtful_node(node)
+                        if node.get('type') == 'checkpoint':
+                            self.handle_checkpoint_node(node)
+                        elif self.__doubtful_mode:
+                            self.handle_doubtful_node(node)
 
         status_data = self.api_client.get_workflow_status()
         if status_data.get('status') == 'failed' and not found_failed_node_to_prompt:
@@ -187,6 +190,33 @@ class StdoutWorkflowOutput(WorkflowOutput):
             self.__console.print(table)
             self.__console.line()
             y_or_n = Prompt.ask("[white] Do you want to run the node \[{}]? [green]y[/](yes) / [bright_red]n[/](no/skip)".format(node['id']),
+                                console=self.__console,
+                                show_choices=False,
+                                choices=["n","y"])
+
+        self.__console.line()
+        self.__console.rule()
+
+        if y_or_n == 'y':
+            self.api_client.approve_node(node['id'])
+        elif y_or_n == 'n':
+            self.api_client.disapprove_node(node['id'])
+
+        self.approved_nodes.add(node['id'])
+
+    def handle_checkpoint_node(self, node):
+        y_or_n = ''
+        self.__console.line()
+        self.__console.rule(f"Checkpoint Reached: [italic]{node['id']}[/italic]")
+
+        description = node.get('description', 'Do you want to proceed?')
+        if node.get('reference'):
+            description += f"\n[dim]Reference: {node.get('reference')}[/dim]"
+
+        self.__console.print(description, justify="center")
+
+        while y_or_n.lower() not in ['y', 'n']:
+            y_or_n = Prompt.ask("[white]Do you want to continue? [green]y[/](yes) / [bright_red]n[/](no/skip)",
                                 console=self.__console,
                                 show_choices=False,
                                 choices=["n","y"])
@@ -288,13 +318,17 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self._logger.info("WorkflowOutput run")
         self.draw_init()
 
-        old_settings = termios.tcgetattr(sys.stdin)
+        is_tty = sys.stdin.isatty()
+        if is_tty:
+            old_settings = termios.tcgetattr(sys.stdin)
+
         try:
-            tty.setcbreak(sys.stdin.fileno())
+            if is_tty:
+                tty.setcbreak(sys.stdin.fileno())
 
             status_data = None
             while not self.event.is_set():
-                if select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
+                if is_tty and select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
                     c = sys.stdin.read(1)
                     if c == '\x18': # Ctrl+X
                         self._request_stop()
@@ -319,7 +353,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
 
                 self.draw_pause()
         finally:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            if is_tty:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
 
         if not self.event.is_set():
