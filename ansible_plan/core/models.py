@@ -285,7 +285,7 @@ class CNode(Node):
     def get_status(self):
         if self._status:
             return self._status
-        return NodeStatus.AWAITING_CONFIRMATION
+        return NodeStatus.NOT_STARTED
 
     def get_type(self):
         return 'checkpoint'

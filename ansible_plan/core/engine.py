@@ -280,6 +280,13 @@ class AnsibleWorkflow():
                                     self.run_node(next_node_id)
                                 else:
                                     self.skip_node(next_node_id)
+                            elif isinstance(next_node, CNode):
+                                next_node.set_status(NodeStatus.AWAITING_CONFIRMATION)
+                                self.notify_event(
+                                    WorkflowEventType.NODE_EVENT,
+                                    NodeStatus.AWAITING_CONFIRMATION,
+                                    next_node
+                                )
 
 
             elif status == NodeStatus.AWAITING_CONFIRMATION:
