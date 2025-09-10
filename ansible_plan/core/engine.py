@@ -231,6 +231,12 @@ class AnsibleWorkflow():
         self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow resumed")
         self.__pause_event.set()
 
+    def _is_waiting_for_confirmation(self):
+        for node_id in self.get_nodes():
+            if self.get_node_object(node_id).get_status() == NodeStatus.AWAITING_CONFIRMATION:
+                return True
+        return False
+
     def get_some_failed_task(self):
         some_failed_tasks = False
         for node_id in self.get_nodes():
@@ -462,6 +468,14 @@ class AnsibleWorkflow():
             if not self.is_running():
                 if self.__stopping:
                     break
+
+                if self._is_waiting_for_confirmation():
+                    if self.__running_status != WorkflowStatus.PAUSED:
+                        self.__running_status = WorkflowStatus.PAUSED
+                        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, 'Workflow paused, waiting for confirmation.')
+                    time.sleep(0.5) # Prevent busy-waiting
+                    continue
+
                 if self.get_some_failed_task():
                     # There are failed tasks, set status and wait for user to retry
                     self.__running_status = WorkflowStatus.FAILED
