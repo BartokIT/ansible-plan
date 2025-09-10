@@ -12,6 +12,8 @@ workflow:
         limit: second_hostname,first_hostname
       - id: 1.2
         import_playbook: playbooks/second.yml
+  - id: info-1
+    description: Step between first and second part
   - id: 2
     project_path: project1
     import_playbook: playbooks/project1.yml
@@ -19,6 +21,9 @@ workflow:
     import_playbook: playbooks/encrypted.yml
     vault_ids:
       - V1
+  - id: info-3
+    description: Step between second and third part 
+    checkpoint: true
   - id: 4
     block:
       - id: 4.1
