@@ -1,4 +1,4 @@
-# workflow-for-ansible
+# ansible-plan
 
 A tool to launch workflows from command line to emulate what is done from Red Hat Ansible® AWX workflow templates
 
@@ -14,7 +14,7 @@ Install the dependencies with the command:
 At minimum a workflow file cam be launched with the following command:
 
 ```bash
-workflow-for-ansible workflow_file.yml
+ansible-plan workflow_file.yml
 ```
 ### Verify workflow file
 To only check the syntax of the workflow file, you can just add the parameter `--verify-only`.
