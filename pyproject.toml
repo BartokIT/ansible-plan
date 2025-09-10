@@ -20,7 +20,7 @@ requires-python = ">=3.8"
 
 [project.urls]
 Documentation = "https://github.com/BartokIT/ansible-plan/blob/main/README.md"
-Repository = "https://github.com/BartokIT/ansible-plant"
+Repository = "https://github.com/BartokIT/ansible-plan"
 Issues = "https://github.com/BartokIT/ansible-plan/issues"
 
 [project.scripts]
