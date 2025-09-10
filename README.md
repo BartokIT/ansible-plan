@@ -1,6 +1,6 @@
 # ansible-plan
 
-A tool to launch workflows from command line to emulate what is done from Red Hat Ansible® AWX workflow templates
+A command-line tool for launching workflows composed of Red Hat Ansible® playbooks
 
 
 ## Prerequisites
