@@ -105,9 +105,11 @@ class StdoutWorkflowOutput(WorkflowOutput):
                 if node['status'] == NodeStatus.AWAITING_CONFIRMATION.value:
                     if node['id'] not in self.approved_nodes:
                         if node.get('type') == 'checkpoint':
-                            self.handle_checkpoint_node(node)
+                            if self.handle_checkpoint_node(node):
+                                return
                         elif self.__doubtful_mode:
-                            self.handle_doubtful_node(node)
+                            if self.handle_doubtful_node(node):
+                                return
 
         status_data = self.api_client.get_workflow_status()
         if status_data.get('status') == 'failed' and not found_failed_node_to_prompt:
@@ -197,14 +199,13 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.__console.line()
         self.__console.rule()
 
-        self._logger.debug(f"User input for checkpoint '{node['id']}': '{y_or_n}' (type: {type(y_or_n)})")
-
         if y_or_n.strip().lower() == 'y':
             self.api_client.approve_node(node['id'])
         elif y_or_n.strip().lower() == 'n':
             self.api_client.disapprove_node(node['id'])
 
         self.approved_nodes.add(node['id'])
+        return True
 
     def handle_checkpoint_node(self, node):
         y_or_n = ''
