@@ -97,7 +97,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
                     self.print_node_status_change(node)
                     self.known_nodes[node_id] = node
 
-                if node['status'] == NodeStatus.FAILED.value and self.__interactive_retry:
+                if node['status'] == NodeStatus.FAILED.value and self.__interactive_retry and node.get('type') != 'checkpoint':
                     if node['id'] not in self.declined_retry_nodes:
                         self.handle_retry(node)
                         found_failed_node_to_prompt = True
