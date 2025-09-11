@@ -64,12 +64,22 @@ class StdoutWorkflowOutput(WorkflowOutput):
 
         if nodes:
             for node in nodes:
-                if node['type'] == 'playbook':
+                node_type = node.get('type')
+                if node_type == 'playbook':
                     self.known_nodes[node['id']] = node
 
+                playbook_col = "-"
+                if node_type == 'playbook':
+                    playbook_col = node.get('playbook', '-')
+                elif node_type == 'label':
+                    playbook_col = f"[dim]({node.get('description', 'Label')})[/dim]"
+                elif node_type == 'checkpoint':
+                    playbook_col = f"[dim]({node.get('description', 'Checkpoint')})[/dim]"
+
+                if node_type in ['playbook', 'label', 'checkpoint']:
                     table.add_row(
                         node['id'],
-                        node.get('playbook', '-'),
+                        playbook_col,
                         node.get('reference', '-'),
                         node.get('started', ''),
                         node.get('ended', ''),
@@ -141,10 +151,19 @@ class StdoutWorkflowOutput(WorkflowOutput):
 
         if nodes:
             for node in nodes:
-                if node['type'] == 'playbook':
+                node_type = node.get('type')
+                playbook_col = "-"
+                if node_type == 'playbook':
+                    playbook_col = node.get('playbook', '-')
+                elif node_type == 'label':
+                    playbook_col = f"[dim]({node.get('description', 'Label')})[/dim]"
+                elif node_type == 'checkpoint':
+                    playbook_col = f"[dim]({node.get('description', 'Checkpoint')})[/dim]"
+
+                if node_type in ['playbook', 'label', 'checkpoint']:
                     table.add_row(
                         node['id'],
-                        node.get('playbook', '-'),
+                        playbook_col,
                         node.get('reference', '-'),
                         node.get('started', ''),
                         node.get('ended', ''),
