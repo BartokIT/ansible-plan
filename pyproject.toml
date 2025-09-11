@@ -14,7 +14,8 @@ dependencies = [
     "jinja2",
     "ansible",
     "fastapi",
-    "uvicorn"
+    "uvicorn",
+    "httpx"
 ]
 requires-python = ">=3.8"
 
