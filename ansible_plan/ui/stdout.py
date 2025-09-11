@@ -254,24 +254,25 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.approved_nodes.add(node['id'])
 
     def print_node_status_change(self, node):
+        node_type = node.get('type')
         status = node.get('status')
-        timestamp = ''
-        if status == NodeStatus.RUNNING.value:
-            timestamp = node.get('started', '')
-        elif status in [NodeStatus.ENDED.value, NodeStatus.FAILED.value, NodeStatus.SKIPPED.value, NodeStatus.STOPPED.value]:
-            timestamp = node.get('ended', '')
+        timestamp = node.get('ended', '')
 
-        # if not timestamp:
-        #     timestamp = datetime.now().strftime('%H:%M:%S')
+        if not timestamp:
+             timestamp = datetime.now().strftime('%H:%M:%S')
 
         table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
         table.add_column(width=(self.__first_column_width +1), justify="right")
         table.add_column()
-        status_text = self._render_status(node['status'])
-        table.add_row(
-            timestamp,
-            f"Node [cyan]{node['id']}[/] is {status_text}"
-        )
+
+        message = ""
+        if node_type == 'label' and status == NodeStatus.ENDED.value:
+            message = f"[bold cyan]LABEL:[/] [cyan]{node.get('description', node['id'])}[/]"
+        else:
+            status_text = self._render_status(node['status'])
+            message = f"Node [cyan]{node['id']}[/] is {status_text}"
+
+        table.add_row(timestamp, message)
         self.__console.print(table)
 
     def handle_retry(self, node):
