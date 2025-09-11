@@ -384,6 +384,8 @@ class TextualWorkflowOutput(WorkflowOutput):
                         # We just set the final label.
                         if node.get('type') == 'block':
                             label = f"[b]{node_id}[/b]"
+                        elif node.get('type') == 'label':
+                            label = f"[cyan]i[/] {node_id}"
                         else:
                             icon = self.status_icons.get(status, " ")
                             label = f"{icon} {node_id}"
@@ -391,7 +393,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                     # If the updated node is the one currently selected, refresh the action buttons
                     if node_id == self.selected_node_id:
-                        if status == NodeStatus.FAILED.value:
+                        if status == NodeStatus.FAILED.value and node.get('type') == 'playbook':
                             self.call_from_thread(self._set_widget_display, self.action_buttons, True)
                         else:
                             self.call_from_thread(self._set_widget_display, self.action_buttons, False)
@@ -464,7 +466,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 if node_data.get('reference'):
                     add_detail("Reference", node_data.get('reference'))
 
-            if node_data.get('status') == NodeStatus.FAILED.value and node_data.get('type') != 'checkpoint':
+            if node_data.get('status') == NodeStatus.FAILED.value and node_data.get('type') == 'playbook':
                 self.action_buttons.display = True
             else:
                 self.action_buttons.display = False
