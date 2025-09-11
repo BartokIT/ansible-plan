@@ -257,6 +257,8 @@ class AnsibleWorkflow():
             # if current node is ended search for next nodes
             if isinstance(node, CNode) and status == NodeStatus.RUNNING:
                 node.set_status(NodeStatus.ENDED)
+            elif isinstance(node, LNode) and status == NodeStatus.NOT_STARTED:
+                node.set_status(NodeStatus.ENDED)
             elif status in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
                 self._logger.info(f"Node {node_id} finished with status {status}. Setting end time.")
                 self.__running_nodes.remove(node_id)
@@ -293,9 +295,6 @@ class AnsibleWorkflow():
                                     NodeStatus.AWAITING_CONFIRMATION,
                                     next_node
                                 )
-                            elif isinstance(next_node, LNode):
-                                next_node.set_status(NodeStatus.ENDED)
-                                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.ENDED, next_node)
 
 
             elif status == NodeStatus.AWAITING_CONFIRMATION:
