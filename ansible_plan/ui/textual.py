@@ -345,7 +345,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 if node_type == 'block':
                     label = f"[b]{child_id}[/b]"
                 elif node_type == 'label':
-                    label = f"🏷️ {child_id}"
+                    label = f"[cyan]i[/] {child_id}"
                 else:
                     icon = self.status_icons.get(child_node_data.get('status'), " ")
                     label = f"{icon} {child_id}"
@@ -450,14 +450,21 @@ class TextualWorkflowOutput(WorkflowOutput):
             elif node_data.get('type') == 'block':
                 add_detail("Type", "Block")
                 add_detail("Strategy", node_data.get('strategy', 'parallel'))
-            elif node_data.get('type') in ['label', 'checkpoint']:
-                add_detail("Type", node_data.get('type').capitalize())
+            elif node_data.get('type') == 'label':
+                add_detail("Type", "Label")
+                if node_data.get('description'):
+                    add_detail("Description", node_data.get('description'))
+                if node_data.get('reference'):
+                    add_detail("Reference", node_data.get('reference'))
+            elif node_data.get('type') == 'checkpoint':
+                add_detail("Type", "Checkpoint")
+                add_detail("Status", node_data.get('status', '-'))
                 if node_data.get('description'):
                     add_detail("Description", node_data.get('description'))
                 if node_data.get('reference'):
                     add_detail("Reference", node_data.get('reference'))
 
-            if node_data.get('status') == NodeStatus.FAILED.value:
+            if node_data.get('status') == NodeStatus.FAILED.value and node_data.get('type') != 'checkpoint':
                 self.action_buttons.display = True
             else:
                 self.action_buttons.display = False
