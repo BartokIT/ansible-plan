@@ -293,6 +293,9 @@ class AnsibleWorkflow():
                                     NodeStatus.AWAITING_CONFIRMATION,
                                     next_node
                                 )
+                            elif isinstance(next_node, LNode):
+                                next_node.set_status(NodeStatus.ENDED)
+                                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.ENDED, next_node)
 
 
             elif status == NodeStatus.AWAITING_CONFIRMATION:

@@ -96,7 +96,7 @@ class BNode(Node):
     def get_status(self):
         if self._status:
             return self._status
-        return NodeStatus.ENDED
+        return NodeStatus.NOT_STARTED
 
     def get_type(self):
         return 'block'
@@ -264,7 +264,7 @@ class LNode(Node):
     def get_status(self):
         if self._status:
             return self._status
-        return NodeStatus.ENDED
+        return NodeStatus.NOT_STARTED
 
     def get_type(self):
         return 'label'
