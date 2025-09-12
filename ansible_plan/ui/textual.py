@@ -90,13 +90,14 @@ class StopWorkflowScreen(ModalScreen):
 class DoubtfulNodeScreen(ModalScreen):
     """Screen with a dialog to approve or skip a node."""
 
-    def __init__(self, node_id: str, **kwargs):
+    def __init__(self, node_id: str, message: str, **kwargs):
         super().__init__(**kwargs)
         self.node_id = node_id
+        self.message = message
 
     def compose(self) -> ComposeResult:
         yield Container(
-            Label(f"Node [b]{self.node_id}[/b] is awaiting your confirmation.", id="question"),
+            Label(self.message, id="question"),
             Horizontal(
                 Button("Approve", variant="success", id="approve"),
                 Button("Skip", variant="primary", id="skip"),
@@ -284,16 +285,16 @@ class TextualWorkflowOutput(WorkflowOutput):
         def _set_widget_display(self, widget, display):
             widget.display = display
 
-        def _push_doubtful_node_screen(self, node_id):
+        def _push_doubtful_node_screen(self, node_id: str, message: str):
             self.push_screen(
-                DoubtfulNodeScreen(node_id),
+                DoubtfulNodeScreen(node_id, message),
                 lambda result: self.check_doubtful_node(result, node_id)
             )
 
         def _process_doubtful_queue(self):
             if not self.is_modal and self.doubtful_node_queue:
-                node_id = self.doubtful_node_queue.popleft()
-                self._push_doubtful_node_screen(node_id)
+                node_id, message = self.doubtful_node_queue.popleft()
+                self._push_doubtful_node_screen(node_id, message)
 
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
@@ -343,6 +344,8 @@ class TextualWorkflowOutput(WorkflowOutput):
                 allow_expand = node_type == 'block'
                 if node_type == 'block':
                     label = f"[b]{child_id}[/b]"
+                elif node_type == 'info':
+                    label = f"[cyan]i[/] {child_id}"
                 else:
                     icon = self.status_icons.get(child_node_data.get('status'), " ")
                     label = f"{icon} {child_id}"
@@ -381,6 +384,8 @@ class TextualWorkflowOutput(WorkflowOutput):
                         # We just set the final label.
                         if node.get('type') == 'block':
                             label = f"[b]{node_id}[/b]"
+                        elif node.get('type') == 'info':
+                            label = f"[cyan]i[/] {node_id}"
                         else:
                             icon = self.status_icons.get(status, " ")
                             label = f"{icon} {node_id}"
@@ -388,7 +393,7 @@ class TextualWorkflowOutput(WorkflowOutput):
 
                     # If the updated node is the one currently selected, refresh the action buttons
                     if node_id == self.selected_node_id:
-                        if status == NodeStatus.FAILED.value:
+                        if status == NodeStatus.FAILED.value and node.get('type') == 'playbook':
                             self.call_from_thread(self._set_widget_display, self.action_buttons, True)
                         else:
                             self.call_from_thread(self._set_widget_display, self.action_buttons, False)
@@ -396,7 +401,10 @@ class TextualWorkflowOutput(WorkflowOutput):
                     if status == NodeStatus.AWAITING_CONFIRMATION.value:
                         if node_id not in self.approved_nodes and node_id not in self.pending_confirmation_nodes:
                             self.pending_confirmation_nodes.add(node_id)
-                            self.doubtful_node_queue.append(node_id)
+                            message = f"Node [b]{node_id}[/b] is awaiting your confirmation."
+                            if node.get('type') == 'checkpoint':
+                                message = f"Checkpoint [b]{node_id}[/b] reached. Proceed?"
+                            self.doubtful_node_queue.append((node_id, message))
                             nodes_need_approval = True
 
             if nodes_need_approval:
@@ -444,8 +452,21 @@ class TextualWorkflowOutput(WorkflowOutput):
             elif node_data.get('type') == 'block':
                 add_detail("Type", "Block")
                 add_detail("Strategy", node_data.get('strategy', 'parallel'))
+            elif node_data.get('type') == 'info':
+                add_detail("Type", "Info")
+                if node_data.get('description'):
+                    add_detail("Description", node_data.get('description'))
+                if node_data.get('reference'):
+                    add_detail("Reference", node_data.get('reference'))
+            elif node_data.get('type') == 'checkpoint':
+                add_detail("Type", "Checkpoint")
+                add_detail("Status", node_data.get('status', '-'))
+                if node_data.get('description'):
+                    add_detail("Description", node_data.get('description'))
+                if node_data.get('reference'):
+                    add_detail("Reference", node_data.get('reference'))
 
-            if node_data.get('status') == NodeStatus.FAILED.value:
+            if node_data.get('status') == NodeStatus.FAILED.value and node_data.get('type') == 'playbook':
                 self.action_buttons.display = True
             else:
                 self.action_buttons.display = False

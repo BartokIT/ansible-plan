@@ -10,7 +10,7 @@ import os
 import logging
 import logging.handlers
 from .exceptions import AnsibleWorkflowDuplicateNodeId, AnsibleWorkflowPlaybookNodeCheck
-from .models import WorkflowStatus, NodeStatus, Node, PNode, WorkflowEventType, WorkflowEvent, WorkflowListener
+from .models import WorkflowStatus, NodeStatus, Node, BNode, PNode, CNode, INode, WorkflowEventType, WorkflowEvent, WorkflowListener
 
 
 class AnsibleWorkflow():
@@ -231,6 +231,12 @@ class AnsibleWorkflow():
         self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, "Workflow resumed")
         self.__pause_event.set()
 
+    def _is_waiting_for_confirmation(self):
+        for node_id in self.get_nodes():
+            if self.get_node_object(node_id).get_status() == NodeStatus.AWAITING_CONFIRMATION:
+                return True
+        return False
+
     def get_some_failed_task(self):
         some_failed_tasks = False
         for node_id in self.get_nodes():
@@ -249,7 +255,12 @@ class AnsibleWorkflow():
             status = node.get_status()
             self._logger.debug(f"__run_step: processing node {node_id} with status {status}")
             # if current node is ended search for next nodes
-            if status in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
+            if isinstance(node, CNode) and status == NodeStatus.RUNNING:
+                node.set_status(NodeStatus.ENDED)
+            elif isinstance(node, (BNode, INode)) and status == NodeStatus.NOT_STARTED:
+                node.set_status(NodeStatus.ENDED)
+                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.ENDED, node)
+            elif status in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
                 self._logger.info(f"Node {node_id} finished with status {status}. Setting end time.")
                 self.__running_nodes.remove(node_id)
                 if not node.is_skipped():
@@ -278,8 +289,18 @@ class AnsibleWorkflow():
                                     self.run_node(next_node_id)
                                 else:
                                     self.skip_node(next_node_id)
+                            elif isinstance(next_node, CNode):
+                                next_node.set_status(NodeStatus.AWAITING_CONFIRMATION)
+                                self.notify_event(
+                                    WorkflowEventType.NODE_EVENT,
+                                    NodeStatus.AWAITING_CONFIRMATION,
+                                    next_node
+                                )
 
 
+            elif status == NodeStatus.AWAITING_CONFIRMATION:
+                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.AWAITING_CONFIRMATION, node)
+                self.__running_nodes.remove(node_id)
             elif status == NodeStatus.STOPPED:
                 self._logger.info(f"Node {node_id} stopped. Setting end time.")
                 node.set_ended_time(datetime.now())
@@ -373,7 +394,11 @@ class AnsibleWorkflow():
 
         self._logger.info(f"Approving node {node_id}")
         node.set_status(None)
-        self.run_node(node_id)
+        if isinstance(node, CNode):
+            node.set_status(NodeStatus.RUNNING)
+            self.add_running_node(node_id)
+        else:
+            self.run_node(node_id)
 
     def disapprove_node(self, node_id: str):
         node = self.get_node_object(node_id)
@@ -382,11 +407,8 @@ class AnsibleWorkflow():
             return
 
         self._logger.info(f"Disapproving node {node_id}")
-        node.set_status(None)
-        node.set_skipped()
-        self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.SKIPPED, node)
-        # Add node to running nodes so its successors can be processed
-        self.add_running_node(node_id)
+        node.set_status(NodeStatus.FAILED)
+        self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.FAILED, node)
 
 
     def run(self, start_node: str = "_s", end_node: str = "_e", verify_only: bool = False):
@@ -446,6 +468,14 @@ class AnsibleWorkflow():
             if not self.is_running():
                 if self.__stopping:
                     break
+
+                if self._is_waiting_for_confirmation():
+                    if self.__running_status != WorkflowStatus.PAUSED:
+                        self.__running_status = WorkflowStatus.PAUSED
+                        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, 'Workflow paused, waiting for confirmation.')
+                    time.sleep(0.5) # Prevent busy-waiting
+                    continue
+
                 if self.get_some_failed_task():
                     # There are failed tasks, set status and wait for user to retry
                     self.__running_status = WorkflowStatus.FAILED

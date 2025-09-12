@@ -14,7 +14,7 @@ class StopWorkflowRequest(BaseModel):
 
 from .core.loader import WorkflowYamlLoader
 from .core.engine import AnsibleWorkflow
-from .core.models import NodeStatus, WorkflowStatus, PNode
+from .core.models import NodeStatus, WorkflowStatus, PNode, INode, CNode
 from .core.exceptions import (
     AnsibleWorkflowLoadingError,
     AnsibleWorkflowValidationError,
@@ -83,6 +83,7 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
             AnsibleWorkflowLoadingError,
             jinja2.exceptions.UndefinedError,
             AnsibleWorkflowVaultScript,
+            AnsibleWorkflowValidationError,
         ) as e:
             aw = AnsibleWorkflow(
                 workflow_file=request.workflow_file,
@@ -93,7 +94,8 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
             aw.add_validation_error(str(e))
             aw.set_status(WorkflowStatus.FAILED)
             current_workflow = aw
-            return {"status": WorkflowStatus.FAILED, "validation_errors": [str(e)]}
+            # Use a 422 status code for validation errors, as this is more specific than a generic 500.
+            raise HTTPException(status_code=422, detail={"validation_errors": [str(e)]})
 
         if request.filter_nodes:
             aw.set_filtered_nodes(request.filter_nodes)
@@ -154,6 +156,11 @@ def get_workflow_nodes():
                     "reference": node_obj.get_reference(),
                 })
                 node_info.update(node_obj.get_telemetry())
+            elif isinstance(node_obj, (INode, CNode)):
+                node_info.update({
+                    "description": node_obj.get_description(),
+                    "reference": node_obj.get_reference(),
+                })
             nodes_data.append(node_info)
         return nodes_data
 

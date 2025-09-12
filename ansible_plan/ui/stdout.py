@@ -64,12 +64,22 @@ class StdoutWorkflowOutput(WorkflowOutput):
 
         if nodes:
             for node in nodes:
-                if node['type'] == 'playbook':
+                node_type = node.get('type')
+                if node_type in ['playbook', 'info', 'checkpoint']:
                     self.known_nodes[node['id']] = node
 
+                playbook_col = "-"
+                if node_type == 'playbook':
+                    playbook_col = node.get('playbook', '-')
+                elif node_type == 'info':
+                    playbook_col = f"[dim]({node.get('description', 'Info')})[/dim]"
+                elif node_type == 'checkpoint':
+                    playbook_col = f"[dim]({node.get('description', 'Checkpoint')})[/dim]"
+
+                if node_type in ['playbook', 'info', 'checkpoint']:
                     table.add_row(
                         node['id'],
-                        node.get('playbook', '-'),
+                        playbook_col,
                         node.get('reference', '-'),
                         node.get('started', ''),
                         node.get('ended', ''),
@@ -97,14 +107,19 @@ class StdoutWorkflowOutput(WorkflowOutput):
                     self.print_node_status_change(node)
                     self.known_nodes[node_id] = node
 
-                if node['status'] == NodeStatus.FAILED.value and self.__interactive_retry:
+                if node['status'] == NodeStatus.FAILED.value and self.__interactive_retry and node.get('type') != 'checkpoint':
                     if node['id'] not in self.declined_retry_nodes:
                         self.handle_retry(node)
                         found_failed_node_to_prompt = True
 
-                if node['status'] == NodeStatus.AWAITING_CONFIRMATION.value and self.__doubtful_mode:
+                if node['status'] == NodeStatus.AWAITING_CONFIRMATION.value:
                     if node['id'] not in self.approved_nodes:
-                        self.handle_doubtful_node(node)
+                        if node.get('type') == 'checkpoint':
+                            if self.handle_checkpoint_node(node):
+                                return
+                        elif self.__doubtful_mode:
+                            if self.handle_doubtful_node(node):
+                                return
 
         status_data = self.api_client.get_workflow_status()
         if status_data.get('status') == 'failed' and not found_failed_node_to_prompt:
@@ -136,10 +151,19 @@ class StdoutWorkflowOutput(WorkflowOutput):
 
         if nodes:
             for node in nodes:
-                if node['type'] == 'playbook':
+                node_type = node.get('type')
+                playbook_col = "-"
+                if node_type == 'playbook':
+                    playbook_col = node.get('playbook', '-')
+                elif node_type == 'info':
+                    playbook_col = f"[dim]({node.get('description', 'Info')})[/dim]"
+                elif node_type == 'checkpoint':
+                    playbook_col = f"[dim]({node.get('description', 'Checkpoint')})[/dim]"
+
+                if node_type in ['playbook', 'info', 'checkpoint']:
                     table.add_row(
                         node['id'],
-                        node.get('playbook', '-'),
+                        playbook_col,
                         node.get('reference', '-'),
                         node.get('started', ''),
                         node.get('ended', ''),
@@ -194,32 +218,61 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.__console.line()
         self.__console.rule()
 
-        if y_or_n == 'y':
+        if y_or_n.strip().lower() == 'y':
             self.api_client.approve_node(node['id'])
-        elif y_or_n == 'n':
+        elif y_or_n.strip().lower() == 'n':
+            self.api_client.disapprove_node(node['id'])
+
+        self.approved_nodes.add(node['id'])
+        return True
+
+    def handle_checkpoint_node(self, node):
+        y_or_n = ''
+        self.__console.line()
+        self.__console.rule(f"Checkpoint Reached: [italic]{node['id']}[/italic]")
+
+        description = node.get('description', 'Do you want to proceed?')
+        if node.get('reference'):
+            description += f"\n[dim]Reference: {node.get('reference')}[/dim]"
+
+        self.__console.print(description, justify="center")
+
+        while y_or_n.lower() not in ['y', 'n']:
+            y_or_n = Prompt.ask("[white]Do you want to continue? [green]y[/](yes) / [bright_red]n[/](no/skip)",
+                                console=self.__console,
+                                show_choices=False,
+                                choices=["n","y"])
+
+        self.__console.line()
+        self.__console.rule()
+
+        if y_or_n.strip().lower() == 'y':
+            self.api_client.approve_node(node['id'])
+        elif y_or_n.strip().lower() == 'n':
             self.api_client.disapprove_node(node['id'])
 
         self.approved_nodes.add(node['id'])
 
     def print_node_status_change(self, node):
+        node_type = node.get('type')
         status = node.get('status')
-        timestamp = ''
-        if status == NodeStatus.RUNNING.value:
-            timestamp = node.get('started', '')
-        elif status in [NodeStatus.ENDED.value, NodeStatus.FAILED.value, NodeStatus.SKIPPED.value, NodeStatus.STOPPED.value]:
-            timestamp = node.get('ended', '')
+        timestamp = node.get('ended', '')
 
-        # if not timestamp:
-        #     timestamp = datetime.now().strftime('%H:%M:%S')
+        if not timestamp:
+             timestamp = datetime.now().strftime('%H:%M:%S')
 
         table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
         table.add_column(width=(self.__first_column_width +1), justify="right")
         table.add_column()
-        status_text = self._render_status(node['status'])
-        table.add_row(
-            timestamp,
-            f"Node [cyan]{node['id']}[/] is {status_text}"
-        )
+
+        message = ""
+        if node_type == 'info' and status == NodeStatus.ENDED.value:
+            message = f"[bold cyan]INFO:[/] [cyan]{node.get('description', node['id'])}[/]"
+        else:
+            status_text = self._render_status(node['status'])
+            message = f"Node [cyan]{node['id']}[/] is {status_text}"
+
+        table.add_row(timestamp, message)
         self.__console.print(table)
 
     def handle_retry(self, node):
@@ -288,13 +341,17 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self._logger.info("WorkflowOutput run")
         self.draw_init()
 
-        old_settings = termios.tcgetattr(sys.stdin)
+        is_tty = sys.stdin.isatty()
+        if is_tty:
+            old_settings = termios.tcgetattr(sys.stdin)
+
         try:
-            tty.setcbreak(sys.stdin.fileno())
+            if is_tty:
+                tty.setcbreak(sys.stdin.fileno())
 
             status_data = None
             while not self.event.is_set():
-                if select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
+                if is_tty and select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
                     c = sys.stdin.read(1)
                     if c == '\x18': # Ctrl+X
                         self._request_stop()
@@ -319,7 +376,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
 
                 self.draw_pause()
         finally:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+            if is_tty:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
 
 
         if not self.event.is_set():

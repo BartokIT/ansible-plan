@@ -96,7 +96,7 @@ class BNode(Node):
     def get_status(self):
         if self._status:
             return self._status
-        return NodeStatus.ENDED
+        return NodeStatus.NOT_STARTED
 
     def get_type(self):
         return 'block'
@@ -253,6 +253,48 @@ class PNode(Node):
                                                                 cmdline=playbook_cmd_line,
                                                                 extravars=self.__extravars,
                                                                 quiet=True)
+
+
+class INode(Node):
+    def __init__(self, id, description='', reference=''):
+        super(INode, self).__init__(id)
+        self.__description = description
+        self.__reference = reference
+
+    def get_status(self):
+        if self._status:
+            return self._status
+        return NodeStatus.NOT_STARTED
+
+    def get_type(self):
+        return 'info'
+
+    def get_description(self):
+        return self.__description
+
+    def get_reference(self):
+        return self.__reference
+
+
+class CNode(Node):
+    def __init__(self, id, description='', reference=''):
+        super(CNode, self).__init__(id)
+        self.__description = description
+        self.__reference = reference
+
+    def get_status(self):
+        if self._status:
+            return self._status
+        return NodeStatus.NOT_STARTED
+
+    def get_type(self):
+        return 'checkpoint'
+
+    def get_description(self):
+        return self.__description
+
+    def get_reference(self):
+        return self.__reference
 
 
 class WorkflowEventType(Enum):

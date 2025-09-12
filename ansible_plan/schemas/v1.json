@@ -30,7 +30,7 @@
                 },
                 "vault_script": {
                     "description": "Path for the vault script",
-                    "type": "string"
+                    "type": ["string", "null"]
                 }
             },
             "additionalProperties": false
@@ -178,6 +178,56 @@
                     "required": [
                         "include_block"
                     ]
+                },
+                {
+                    "properties": {
+                        "id": {
+                            "description": "Identifier for the node inside the workflow",
+                            "type": ["number", "string"]
+                        },
+                        "checkpoint": {
+                            "description": "A checkpoint node",
+                            "type": "boolean"
+                        },
+                        "description": {
+                            "description": "Describes what the node does",
+                            "type": "string"
+                        },
+                        "reference": {
+                            "description": "Tells who is the owner of the task",
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "required": [
+                        "checkpoint"
+                    ]
+                },
+                {
+                    "properties": {
+                        "id": {
+                            "description": "Identifier for the node inside the workflow",
+                            "type": ["number", "string"]
+                        },
+                        "description": {
+                            "description": "Describes what the node does",
+                            "type": "string"
+                        },
+                        "reference": {
+                            "description": "Tells who is the owner of the task",
+                            "type": "string"
+                        }
+                    },
+                    "additionalProperties": false,
+                    "not": {
+                        "anyOf": [
+                            { "required": ["import_playbook"] },
+                            { "required": ["block"] },
+                            { "required": ["checkpoint"] }
+                        ]
+                    },
+                    "title": "Info Node",
+                    "description": "A node that is purely informational and performs no action."
                 }
             ]
         }
