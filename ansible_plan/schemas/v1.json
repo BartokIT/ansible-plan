@@ -225,7 +225,9 @@
                             { "required": ["block"] },
                             { "required": ["checkpoint"] }
                         ]
-                    }
+                    },
+                    "title": "Info Node",
+                    "description": "A node that is purely informational and performs no action."
                 }
             ]
         }

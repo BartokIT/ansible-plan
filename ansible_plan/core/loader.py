@@ -17,7 +17,7 @@ from .exceptions import (AnsibleWorkflowConfigurationError, AnsibleWorkflowImpor
                          AnsibleWorkflowVaultScriptNotExists,
                          AnsibleWorkflowVaultScriptNotSet, AnsibleWorkflowYAMLNotValid)
 from .engine import AnsibleWorkflow
-from .models import Node, PNode, BNode, LNode, CNode
+from .models import Node, PNode, BNode, INode, CNode
 from .validation import validate_workflow
 from collections.abc import Mapping
 from enum import Enum
@@ -482,8 +482,8 @@ class WorkflowYamlLoader(WorkflowLoader):
                                     (indentation, pnode_parameters, level, strategy, block_id))
                 elif inode.get('checkpoint', False):
                     gnode = CNode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
-                else: # It's a label node
-                    gnode = LNode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
+                else: # It's a info node
+                    gnode = INode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
 
             # the node specification is added
             self.__workflow.add_node(gnode, dict(level=level, block=dict(strategy=strategy, block_id=block_id)))

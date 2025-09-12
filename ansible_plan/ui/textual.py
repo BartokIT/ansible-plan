@@ -344,7 +344,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                 allow_expand = node_type == 'block'
                 if node_type == 'block':
                     label = f"[b]{child_id}[/b]"
-                elif node_type == 'label':
+                elif node_type == 'info':
                     label = f"[cyan]i[/] {child_id}"
                 else:
                     icon = self.status_icons.get(child_node_data.get('status'), " ")
@@ -384,7 +384,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                         # We just set the final label.
                         if node.get('type') == 'block':
                             label = f"[b]{node_id}[/b]"
-                        elif node.get('type') == 'label':
+                        elif node.get('type') == 'info':
                             label = f"[cyan]i[/] {node_id}"
                         else:
                             icon = self.status_icons.get(status, " ")
@@ -452,8 +452,8 @@ class TextualWorkflowOutput(WorkflowOutput):
             elif node_data.get('type') == 'block':
                 add_detail("Type", "Block")
                 add_detail("Strategy", node_data.get('strategy', 'parallel'))
-            elif node_data.get('type') == 'label':
-                add_detail("Type", "Label")
+            elif node_data.get('type') == 'info':
+                add_detail("Type", "Info")
                 if node_data.get('description'):
                     add_detail("Description", node_data.get('description'))
                 if node_data.get('reference'):

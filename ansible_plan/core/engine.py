@@ -10,7 +10,7 @@ import os
 import logging
 import logging.handlers
 from .exceptions import AnsibleWorkflowDuplicateNodeId, AnsibleWorkflowPlaybookNodeCheck
-from .models import WorkflowStatus, NodeStatus, Node, BNode, PNode, CNode, LNode, WorkflowEventType, WorkflowEvent, WorkflowListener
+from .models import WorkflowStatus, NodeStatus, Node, BNode, PNode, CNode, INode, WorkflowEventType, WorkflowEvent, WorkflowListener
 
 
 class AnsibleWorkflow():
@@ -257,7 +257,7 @@ class AnsibleWorkflow():
             # if current node is ended search for next nodes
             if isinstance(node, CNode) and status == NodeStatus.RUNNING:
                 node.set_status(NodeStatus.ENDED)
-            elif isinstance(node, (BNode, LNode)) and status == NodeStatus.NOT_STARTED:
+            elif isinstance(node, (BNode, INode)) and status == NodeStatus.NOT_STARTED:
                 node.set_status(NodeStatus.ENDED)
                 self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.ENDED, node)
             elif status in [NodeStatus.ENDED, NodeStatus.SKIPPED]:

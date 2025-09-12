@@ -255,9 +255,9 @@ class PNode(Node):
                                                                 quiet=True)
 
 
-class LNode(Node):
+class INode(Node):
     def __init__(self, id, description='', reference=''):
-        super(LNode, self).__init__(id)
+        super(INode, self).__init__(id)
         self.__description = description
         self.__reference = reference
 
@@ -267,7 +267,7 @@ class LNode(Node):
         return NodeStatus.NOT_STARTED
 
     def get_type(self):
-        return 'label'
+        return 'info'
 
     def get_description(self):
         return self.__description

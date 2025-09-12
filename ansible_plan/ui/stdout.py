@@ -65,18 +65,18 @@ class StdoutWorkflowOutput(WorkflowOutput):
         if nodes:
             for node in nodes:
                 node_type = node.get('type')
-                if node_type in ['playbook', 'label', 'checkpoint']:
+                if node_type in ['playbook', 'info', 'checkpoint']:
                     self.known_nodes[node['id']] = node
 
                 playbook_col = "-"
                 if node_type == 'playbook':
                     playbook_col = node.get('playbook', '-')
-                elif node_type == 'label':
-                    playbook_col = f"[dim]({node.get('description', 'Label')})[/dim]"
+                elif node_type == 'info':
+                    playbook_col = f"[dim]({node.get('description', 'Info')})[/dim]"
                 elif node_type == 'checkpoint':
                     playbook_col = f"[dim]({node.get('description', 'Checkpoint')})[/dim]"
 
-                if node_type in ['playbook', 'label', 'checkpoint']:
+                if node_type in ['playbook', 'info', 'checkpoint']:
                     table.add_row(
                         node['id'],
                         playbook_col,
@@ -155,12 +155,12 @@ class StdoutWorkflowOutput(WorkflowOutput):
                 playbook_col = "-"
                 if node_type == 'playbook':
                     playbook_col = node.get('playbook', '-')
-                elif node_type == 'label':
-                    playbook_col = f"[dim]({node.get('description', 'Label')})[/dim]"
+                elif node_type == 'info':
+                    playbook_col = f"[dim]({node.get('description', 'Info')})[/dim]"
                 elif node_type == 'checkpoint':
                     playbook_col = f"[dim]({node.get('description', 'Checkpoint')})[/dim]"
 
-                if node_type in ['playbook', 'label', 'checkpoint']:
+                if node_type in ['playbook', 'info', 'checkpoint']:
                     table.add_row(
                         node['id'],
                         playbook_col,
@@ -266,8 +266,8 @@ class StdoutWorkflowOutput(WorkflowOutput):
         table.add_column()
 
         message = ""
-        if node_type == 'label' and status == NodeStatus.ENDED.value:
-            message = f"[bold cyan]LABEL:[/] [cyan]{node.get('description', node['id'])}[/]"
+        if node_type == 'info' and status == NodeStatus.ENDED.value:
+            message = f"[bold cyan]INFO:[/] [cyan]{node.get('description', node['id'])}[/]"
         else:
             status_text = self._render_status(node['status'])
             message = f"Node [cyan]{node['id']}[/] is {status_text}"
