@@ -10,7 +10,7 @@ import os
 import logging
 import logging.handlers
 from .exceptions import AnsibleWorkflowDuplicateNodeId, AnsibleWorkflowPlaybookNodeCheck
-from .models import WorkflowStatus, NodeStatus, Node, PNode, CNode, WorkflowEventType, WorkflowEvent, WorkflowListener
+from .models import WorkflowStatus, NodeStatus, Node, BNode, PNode, CNode, LNode, WorkflowEventType, WorkflowEvent, WorkflowListener
 
 
 class AnsibleWorkflow():
