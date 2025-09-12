@@ -65,7 +65,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         if nodes:
             for node in nodes:
                 node_type = node.get('type')
-                if node_type == 'playbook':
+                if node_type in ['playbook', 'label', 'checkpoint']:
                     self.known_nodes[node['id']] = node
 
                 playbook_col = "-"
