@@ -5,8 +5,7 @@ pbr
 wheel
 # matplotlib
 # uncomment to generate graph file
-# graphviz
-# pygraphviz
+graphviz
 textual
 rich
 jinja2

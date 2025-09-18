@@ -127,6 +127,9 @@ def read_options():
     parser.add_argument('--doubtful-mode', dest='doubtful_mode', action='store_true',
                         help='Ask for each node if should be started or skipped')
 
+    parser.add_argument('--export-graph', dest='export_graph', type=str,
+                        help='Export the workflow graph to a file (e.g., workflow.png)')
+
     # add extra vars parameter from ansible library
     opt_help.add_runtask_options(parser)
 
@@ -163,6 +166,9 @@ def keyvalue(value):
         raise Exception('Key value malformatted: key=value, missing the "="')
     return value.split('=')
 
+from .core.loader import WorkflowYamlLoader
+from .graph import generate_graph
+
 def main():
     os.environ['TERM'] = 'xterm-256color'
     cmd_args = read_options()
@@ -172,15 +178,29 @@ def main():
         logging_dir += "/%s_%s" % (os.path.basename(cmd_args.workflow), datetime.now().strftime("%Y%m%d_%H%M%S"))
 
     logger = define_logger(logging_dir, cmd_args.log_level)
-    console = Console()
-
-    check_and_start_backend(logger)
 
     extra_vars = {}
     for single_extra_vars in cmd_args.extra_vars:
         extra_vars.update(parse_kv(single_extra_vars))
 
     input_templating = {x: y for [x, y] in cmd_args.input_templating}
+
+    if cmd_args.export_graph:
+        loader = WorkflowYamlLoader(
+            workflow_file=cmd_args.workflow,
+            logging_dir=logging_dir,
+            logging_level=cmd_args.log_level,
+            input_templating=input_templating,
+            check_mode=cmd_args.check_mode,
+            verbosity=cmd_args.verbosity
+        )
+        workflow = loader.parse(extra_vars=extra_vars)
+        generate_graph(workflow, cmd_args.export_graph)
+        print(f"Graph exported to {cmd_args.export_graph}")
+        sys.exit(0)
+    console = Console()
+
+    check_and_start_backend(logger)
 
     start_payload = {
         "workflow_file": os.path.abspath(cmd_args.workflow),
