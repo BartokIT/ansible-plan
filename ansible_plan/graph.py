@@ -13,7 +13,7 @@ def generate_graph(workflow: AnsibleWorkflow, output_path: str):
     """
     dot = Digraph(comment='Ansible Workflow')
     dot.attr(compound='true')
-    dot.attr('node', shape='box')
+    dot.attr('graph', rankdir='LR')
 
     # Group nodes by reference
     nodes_by_reference = defaultdict(list)
@@ -28,8 +28,11 @@ def generate_graph(workflow: AnsibleWorkflow, output_path: str):
     for i, (reference, nodes) in enumerate(nodes_by_reference.items()):
         with dot.subgraph(name=f'cluster_{i}') as c:
             c.attr(label=reference)
+            if len(nodes) == 1:
+                # Add a hidden node to force the cluster to be drawn
+                c.node(f'hidden_{i}', style='invis', width='0', height='0', label='')
             for node in nodes:
-                c.node(node.get_id(), label=f"{node.get_type()}\\n{node.get_id()}")
+                c.node(node.get_id(), label=node.get_id(), shape='ellipse')
 
     # Add edges
     for from_node, to_node in workflow.get_graph().edges():
