@@ -1,0 +1,26 @@
+---
+options:
+  vault_script: vault_script_test.py
+defaults:
+  inventory: inventory.ini
+  verbosity: 4
+workflow:
+  - id: info-1
+    description: Start of the workflow 
+  - id: part-1 
+    block:
+      - id: part-1-1 
+        import_playbook: playbooks/first.yml
+        limit: second_hostname,first_hostname
+      - id: part-1-2 
+        import_playbook: playbooks/second.yml
+  - id: checkpoint-2
+    description: Finish of first part 
+    checkpoint: true
+  - id: part-2 
+    block:
+      - id: part-2-1 
+        import_playbook: playbooks/first.yml
+        limit: second_hostname,first_hostname
+      - id: part-2-2 
+        import_playbook: playbooks/second.yml

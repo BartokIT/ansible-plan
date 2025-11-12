@@ -1,0 +1,17 @@
+---
+options:
+  vault_script: vault_script_test.py
+defaults:
+  inventory: inventory.ini
+  verbosity: 4
+workflow:
+  - id: first_playbook 
+    import_playbook: playbooks/third.yml
+  - id: second_playbook 
+    import_playbook: playbooks/third.yml
+  - id: third_playbook 
+    import_playbook: playbooks/third.yml
+  - id: fourth_playbook 
+    import_playbook: playbooks/third.yml
+  - id: fifth_playbook 
+    import_playbook: playbooks/third.yml

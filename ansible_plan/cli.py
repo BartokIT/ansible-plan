@@ -131,7 +131,7 @@ def read_options():
     opt_help.add_runtask_options(parser)
 
     # influences the output
-    parser.add_argument('--mode', default='stdout', choices=["stdout", "textual"],
+    parser.add_argument('--mode', default='stdout', choices=["stdout", "visual"],
                         help='Render the progress using textual or stdout.')
 
     parser.add_argument('-d', '--draw', dest='draw_png', action='store_true',
@@ -234,7 +234,7 @@ def main():
         sys.exit(1)
 
 
-    if cmd_args.mode == 'textual':
+    if cmd_args.mode == 'visual':
         output = TextualWorkflowOutput(
             backend_url=BACKEND_URL,
             event=threading.Event(),
