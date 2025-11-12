@@ -1,5 +1,7 @@
+import argparse
+import logging
 import os
-print(f"Backend CWD: {os.getcwd()}")
+import json
 import signal
 import sys
 import threading
@@ -9,6 +11,7 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List
 
+uvicorn_log_config_file='/tmp/ansible_plan_service_log.json'
 class StopWorkflowRequest(BaseModel):
     mode: str = "graceful"
 
@@ -276,7 +279,43 @@ def shutdown():
 def health_check():
     return {"status": "ok"}
 
+def define_logger(logging_dir, level):
+    common_format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    logger_file_path = os.path.join(logging_dir, 'service.log')
+    if not os.path.exists(os.path.dirname(logger_file_path)):
+        os.makedirs(os.path.dirname(logger_file_path))
+
+    logger = logging.getLogger('main')
+    if level:
+        logger.setLevel(getattr(logging, level.upper()))
+
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format=common_format,
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    conf_uvicorn=dict(version=1)
+    conf_uvicorn['handlers']=dict(default={'formatter':'default','class':'logging.FileHandler','filename': logger_file_path})
+    conf_uvicorn['loggers']={'uvicorn.access':{'level':'ERROR'}}
+    conf_uvicorn['formatters']={'default':{'format': common_format}}
+    conf_uvicorn['root']={'level': level.upper(),'handlers':['default'],'propgate':True}
+    with open(uvicorn_log_config_file, "w") as file:
+        json.dump(conf_uvicorn, file, indent=4) # Use indent for pretty formattin
+    return logger
+
+def read_options():
+    parser = argparse.ArgumentParser(description='This is the server side of the Aansi mimics the AWX/Ansible Tower® workflows from command line.')
+    parser.add_argument('--log-dir', dest='log_dir',
+                        help='set the parent output logging directory')
+
+    parser.add_argument('--log-level', dest='log_level', default='info', choices=["debug", "info", "warning", "error", "critical"],
+                        help='set the logging level. defaults to info')
+
+    return parser.parse_args()
+
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8001, log_level="info")
+    cmd_args = read_options()
+    define_logger(cmd_args.log_dir,cmd_args.log_level)
+    uvicorn.run(app, host="0.0.0.0", port=8001, log_config=uvicorn_log_config_file)
