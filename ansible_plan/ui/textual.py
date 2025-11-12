@@ -451,7 +451,7 @@ class TextualWorkflowOutput(WorkflowOutput):
                     self.stdout_watcher = self.watch_stdout(node_id)
             elif node_data.get('type') == 'block':
                 add_detail("Type", "Block")
-                add_detail("Strategy", node_data.get('strategy', 'parallel'))
+                add_detail("Child strategy", node_data.get('strategy'))
             elif node_data.get('type') == 'info':
                 add_detail("Type", "Info")
                 if node_data.get('description'):

@@ -33,10 +33,10 @@ class WorkflowLoader(metaclass=abc.ABCMeta):
 
 
 class YamlKeys(Enum):
-    META_KEY: str = 'meta'
-    DEFAULTS_KEY: str = 'defaults'
-    OPTIONS_KEY: str = 'options'
-    TEMPLATING_KEY: str = 'templating'
+    META_KEY = 'meta'
+    DEFAULTS_KEY = 'defaults'
+    OPTIONS_KEY = 'options'
+    TEMPLATING_KEY = 'templating'
 
 
 class WorkflowYamlLoader(WorkflowLoader):
@@ -45,7 +45,7 @@ class WorkflowYamlLoader(WorkflowLoader):
     Ansible task names.
     '''
     def __init__(self, workflow_file: str, logging_dir: str,
-                 logging_level: str = None, input_templating: dict={},
+                 logging_level: str = 'error', input_templating: dict={},
                  check_mode=False, verbosity=0, doubtful_mode=False):
         '''
         Initialize the loader
@@ -59,7 +59,7 @@ class WorkflowYamlLoader(WorkflowLoader):
             WorkflowLoader: An instance of the abstract class WorkflowLoader
         '''
         self.__define_logger(logging_dir, logging_level)
-        self.__workflow_file: string = workflow_file
+        self.__workflow_file: str = workflow_file
         self.__workflow: AnsibleWorkflow = AnsibleWorkflow(self.__workflow_file, logging_dir, logging_level, doubtful_mode)
         self._default_format_version: int = 1
         self.__check_mode: bool = check_mode
@@ -269,7 +269,7 @@ class WorkflowYamlLoader(WorkflowLoader):
         self.__yaml_parsed['workflow'].append(dict(id='_e', block=[]))
 
         # add a dummy root node to visualize the workflow like a tree in console
-        self.__workflow.add_node(BNode("_root"))
+        self.__workflow.add_node(BNode("_root"),{'child': {'strategy': 'serial'}})
         self.__workflow.get_original_graph().add_node('_root')
 
         # perform static inclusion where include_block is found
@@ -287,7 +287,7 @@ class WorkflowYamlLoader(WorkflowLoader):
             self._logger.fatal("Impossible to parse the workflow. Validation error: %s" % err)
             raise AnsibleWorkflowValidationError("Wrong workflow format.\n%s" % err.message)
 
-        # call the parser of the workflow key
+        # call the parser of the workflow key, starting with a serial strategy
         self._parse_workflow_v1(to_be_imported=self.__yaml_parsed['workflow'], parent_nodes=[], strategy='serial', defaults=defaults, options=options)
 
     def _perform_string_template_rendering(self, template_string: str, template_variables: typing.Dict[str, typing.Any]):
@@ -322,7 +322,6 @@ class WorkflowYamlLoader(WorkflowLoader):
                     self._perform_template_rendering(value, template_variables)
                 i = i + 1
 
-
     def _perform_static_inclusion(self, parsed_yml: typing.List[dict], options: typing.Dict[str, str], prefix='', template_variables: typing.Dict[str, typing.Any]={}):
         '''
         Perform inclusion of file containig block specifications
@@ -344,7 +343,6 @@ class WorkflowYamlLoader(WorkflowLoader):
                     temporary_template_variables.update(inode['templating'])
 
                 # prepend included block file with global path if not absolute
-                self._logger.debug("XXXX")
                 to_be_included_file = self._perform_string_template_rendering(inode.pop('include_block'), temporary_template_variables)
                 included_block_prefix = inode.pop('id_prefix', '')
                 if options.get("global_path", False) and not os.path.isabs(to_be_included_file):
@@ -486,7 +484,11 @@ class WorkflowYamlLoader(WorkflowLoader):
                     gnode = INode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
 
             # the node specification is added
-            self.__workflow.add_node(gnode, dict(level=level, block=dict(strategy=strategy, block_id=block_id)))
+            node_info=dict(level=level, block=dict(strategy=strategy, block_id=block_id))
+            if 'block' in inode:
+                node_info['child']={'strategy':inode.get('strategy', 'parallel')}
+
+            self.__workflow.add_node(gnode, node_info)
 
             # saves also original tree
             self.__workflow.get_original_graph().add_node(gnode_id)
