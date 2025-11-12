@@ -210,7 +210,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
             table.add_column()
             self.__console.print(table)
             self.__console.line()
-            y_or_n = Prompt.ask("[white] Do you want to run the node \[{}]? [green]y[/](yes) / [bright_red]n[/](no/skip)".format(node['id']),
+            y_or_n = Prompt.ask("[white] Do you want to run the node \[{}]? [green]y[/](yes) / [bright_red]n[/](no=skip)".format(node['id']),
                                 console=self.__console,
                                 show_choices=False,
                                 choices=["n","y"])
@@ -238,7 +238,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
         self.__console.print(description, justify="center")
 
         while y_or_n.lower() not in ['y', 'n']:
-            y_or_n = Prompt.ask("[white]Do you want to continue? [green]y[/](yes) / [bright_red]n[/](no/skip)",
+            y_or_n = Prompt.ask("[white]Do you want to continue? [green]y[/](yes) / [bright_red]n[/](no)",
                                 console=self.__console,
                                 show_choices=False,
                                 choices=["n","y"])
