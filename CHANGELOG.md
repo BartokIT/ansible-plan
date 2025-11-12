@@ -2,6 +2,8 @@
 
 ## 0.1.2 - 2025-11-14
 
-### Bug Fixes
+### Changed
+- The cli choice to use the textual library is now 'visual'
 
-- Fixed strategy visualization data.
+### Fixed 
+- Fixed strategy data visualized in the UI 
