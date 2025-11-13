@@ -143,7 +143,7 @@ def read_options():
     parser.add_argument('-size', '--draw-size', dest='draw_size', default=10, type=int,
                         help='Choose the size of the draw graph')
 
-    parser.add_argument('--log-dir', dest='log_dir', default='logs',
+    parser.add_argument('--log-dir', dest='log_dir', default='/var/log/ansible/plan',
                         help='set the parent output logging directory. defaults to logs/[workflow name]-[execution time]')
 
     parser.add_argument('--log-dir-no-info', dest='log_dir_no_info', action='store_true',
