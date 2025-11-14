@@ -41,7 +41,6 @@ class WorkflowStartRequest(BaseModel):
     skip_nodes: List[str] = Field(default_factory=list)
     filter_nodes: List[str] = Field(default_factory=list)
     log_dir: str = "logs"
-    log_dir_no_info: bool = False
     log_level: str = "info"
     verify_only: bool = False
     doubtful_mode: bool = False
@@ -63,14 +62,10 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
                     "running_workflow_file": current_workflow.get_workflow_file()
                 })
 
-        logging_dir = "%s" % request.log_dir
-        if not request.log_dir_no_info:
-            logging_dir += "/%s_%s" % (os.path.basename(request.workflow_file), datetime.now().strftime("%Y%m%d_%H%M%S"))
-
         try:
             loader = WorkflowYamlLoader(
                 request.workflow_file,
-                logging_dir,
+                request.log_dir,
                 request.log_level,
                 request.input_templating,
                 request.check_mode,
@@ -87,7 +82,7 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
         ) as e:
             aw = AnsibleWorkflow(
                 workflow_file=request.workflow_file,
-                logging_dir=logging_dir,
+                logging_dir=request.log_dir,
                 log_level=request.log_level,
                 doubtful_mode=request.doubtful_mode,
             )
