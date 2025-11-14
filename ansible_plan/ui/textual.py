@@ -90,17 +90,18 @@ class StopWorkflowScreen(ModalScreen):
 class DoubtfulNodeScreen(ModalScreen):
     """Screen with a dialog to approve or skip a node."""
 
-    def __init__(self, node_id: str, message: str, **kwargs):
+    def __init__(self, node_id: str, message: str, disapprove_label:str, **kwargs):
         super().__init__(**kwargs)
         self.node_id = node_id
         self.message = message
+        self.disapprove_label = disapprove_label
 
     def compose(self) -> ComposeResult:
         yield Container(
             Label(self.message, id="question"),
             Horizontal(
                 Button("Approve", variant="success", id="approve"),
-                Button("Skip", variant="primary", id="skip"),
+                Button(self.disapprove_label, variant="primary", id="skip"),
                 id="buttons",
             ),
             id="dialog",
@@ -285,16 +286,16 @@ class TextualWorkflowOutput(WorkflowOutput):
         def _set_widget_display(self, widget, display):
             widget.display = display
 
-        def _push_doubtful_node_screen(self, node_id: str, message: str):
+        def _push_doubtful_node_screen(self, node_id: str, message: str,disapprove_label:str):
             self.push_screen(
-                DoubtfulNodeScreen(node_id, message),
+                DoubtfulNodeScreen(node_id, message, disapprove_label),
                 lambda result: self.check_doubtful_node(result, node_id)
             )
 
         def _process_doubtful_queue(self):
             if not self.is_modal and self.doubtful_node_queue:
-                node_id, message = self.doubtful_node_queue.popleft()
-                self._push_doubtful_node_screen(node_id, message)
+                node_id, message, disapprove_label = self.doubtful_node_queue.popleft()
+                self._push_doubtful_node_screen(node_id, message, disapprove_label)
 
         def action_cycle_themes(self) -> None:
             """An action to cycle themes."""
@@ -402,9 +403,11 @@ class TextualWorkflowOutput(WorkflowOutput):
                         if node_id not in self.approved_nodes and node_id not in self.pending_confirmation_nodes:
                             self.pending_confirmation_nodes.add(node_id)
                             message = f"Node [b]{node_id}[/b] is awaiting your confirmation."
+                            disapprove_label = "Skip"
                             if node.get('type') == 'checkpoint':
                                 message = f"Checkpoint [b]{node_id}[/b] reached. Proceed?"
-                            self.doubtful_node_queue.append((node_id, message))
+                                disapprove_label = "Stop"
+                            self.doubtful_node_queue.append((node_id, message, disapprove_label))
                             nodes_need_approval = True
 
             if nodes_need_approval:
