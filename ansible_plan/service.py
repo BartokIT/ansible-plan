@@ -142,8 +142,8 @@ def get_workflow_nodes():
 
             if node_info['type'] == 'block':
                 node_data = all_node_datas.get(node_id, {})
-                if 'block' in node_data and 'strategy' in node_data['block']:
-                    node_info['strategy'] = node_data['block']['strategy']
+                if 'child' in node_data and 'strategy' in node_data['child']:
+                    node_info['strategy'] = node_data['child']['strategy']
 
             if isinstance(node_obj, PNode):
                 node_info.update({
