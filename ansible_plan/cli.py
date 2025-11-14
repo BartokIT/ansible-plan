@@ -57,7 +57,7 @@ def define_logger(logging_dir, level):
     return logger
 
 
-def check_and_start_backend(logger):
+def check_and_start_backend(logger, logging_dir):
     try:
         httpx.get(f"{BACKEND_URL}/health")
         logger.info("Backend is already running.")
@@ -67,8 +67,8 @@ def check_and_start_backend(logger):
 
         popen_kwargs = {
             "cwd": project_root,
-            "stdout": open(os.path.join(project_root, "backend_stdout.log"), "wb"),
-            "stderr": open(os.path.join(project_root, "backend_stderr.log"), "wb"),
+            "stdout": open(os.path.join(logging_dir, "backend_stdout.log"), "wb"),
+            "stderr": open(os.path.join(logging_dir, "backend_stderr.log"), "wb"),
         }
 
         if os.name == 'nt':
@@ -174,7 +174,7 @@ def main():
     logger = define_logger(logging_dir, cmd_args.log_level)
     console = Console()
 
-    check_and_start_backend(logger)
+    check_and_start_backend(logger, logging_dir)
 
     extra_vars = {}
     for single_extra_vars in cmd_args.extra_vars:
