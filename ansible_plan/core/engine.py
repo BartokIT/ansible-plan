@@ -21,6 +21,7 @@ class AnsibleWorkflow():
         self.__define_logger(logging_dir, log_level)
         self.__data = dict()
         self.__running_nodes = []
+        self.__running_nodes_lock = threading.Lock()
         self.__stopped = False
         self.__listeners: WorkflowListener = []
         self.__skipped_nodes: typing.List[str] = []
@@ -174,13 +175,15 @@ class AnsibleWorkflow():
         return True
 
     def is_running(self):
-        return len(self.__running_nodes) != 0
+        with self.__running_nodes_lock:
+            return len(self.__running_nodes) != 0
 
     def get_running_status(self):
         return self.__running_status
 
     def get_running_nodes(self):
-        return self.__running_nodes
+        with self.__running_nodes_lock:
+            return list(self.__running_nodes)
 
     def get_graph(self):
         return self.__graph
@@ -202,7 +205,8 @@ class AnsibleWorkflow():
         self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.SKIPPED, node)
 
     def add_running_node(self, node_id):
-        self.__running_nodes.append(node_id)
+        with self.__running_nodes_lock:
+            self.__running_nodes.append(node_id)
 
     def is_stopping(self):
         return self.__stopped
@@ -249,35 +253,38 @@ class AnsibleWorkflow():
         return some_failed_tasks
 
     def __run_step(self, end_node="_e"):
-        self._logger.debug(f"__run_step: running_nodes={self.__running_nodes}")
-        for node_id in list(self.__running_nodes):
-            node = self.get_node_object(node_id)
-            status = node.get_status()
-            self._logger.debug(f"__run_step: processing node {node_id} with status {status}")
-            # if current node is ended search for next nodes
-            if isinstance(node, CNode) and status == NodeStatus.RUNNING:
-                node.set_status(NodeStatus.ENDED)
-            elif isinstance(node, (BNode, INode)) and status == NodeStatus.NOT_STARTED:
-                node.set_status(NodeStatus.ENDED)
-                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.ENDED, node)
-            elif status in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
-                self._logger.info(f"Node {node_id} finished with status {status}. Setting end time.")
-                self.__running_nodes.remove(node_id)
-                if not node.is_skipped():
-                    node.set_ended_time(datetime.now())
+        with self.__running_nodes_lock:
+            self._logger.debug(f"__run_step: running_nodes={self.__running_nodes}")
+            for node_id in list(self.__running_nodes):
+                node = self.get_node_object(node_id)
+                status = node.get_status()
+                self._logger.debug(f"__run_step: processing node {node_id} with status {status}")
+                # if current node is ended search for next nodes
+                if isinstance(node, CNode) and status == NodeStatus.RUNNING:
+                    node.set_status(NodeStatus.ENDED)
+                elif isinstance(node, (BNode, INode)) and status == NodeStatus.NOT_STARTED:
+                    node.set_status(NodeStatus.ENDED)
                     self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.ENDED, node)
+            elif status in [NodeStatus.ENDED, NodeStatus.SKIPPED, NodeStatus.FAILED]:
+                    self._logger.info(f"Node {node_id} finished with status {status}. Setting end time.")
+                    self.__running_nodes.remove(node_id)
 
-                for out_edge in self.__graph.out_edges(node_id):
-                    next_node_id = out_edge[1]
-                    next_node = self.get_node_object(next_node_id)
+                if status in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
+                    if not node.is_skipped():
+                        node.set_ended_time(datetime.now())
+                        self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.ENDED, node)
 
-                    # check if a node as previous nodes ended and not already started
-                    if self.is_node_runnable(next_node_id) and next_node_id not in self.__running_nodes:
-                        if next_node_id != end_node and not self.__stopping:
-                            self.__running_nodes.append(next_node_id)
-                            if isinstance(next_node, PNode):
-                                # run a node
-                                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.PRE_RUNNING, next_node)
+                    for out_edge in self.__graph.out_edges(node_id):
+                        next_node_id = out_edge[1]
+                        next_node = self.get_node_object(next_node_id)
+
+                        # check if a node as previous nodes ended and not already started
+                        if self.is_node_runnable(next_node_id) and next_node_id not in self.__running_nodes:
+                            if next_node_id != end_node and not self.__stopping:
+                                self.__running_nodes.append(next_node_id)
+                                if isinstance(next_node, PNode):
+                                    # run a node
+                                    self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.PRE_RUNNING, next_node)
                                 if self.__doubtful_mode:
                                     next_node.set_status(NodeStatus.AWAITING_CONFIRMATION)
                                     self.notify_event(
@@ -306,13 +313,7 @@ class AnsibleWorkflow():
                 node.set_ended_time(datetime.now())
                 self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.STOPPED, node)
                 self.__running_nodes.remove(node_id)
-            elif status == NodeStatus.FAILED:
-                # just remove a failed node
-                # print("Failed node %s" % node_id)
-                node.set_ended_time(datetime.now())
-                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.FAILED, node)
-                self.__running_nodes.remove(node_id)
-                # Do not set workflow status to FAILED here, to allow for retry.
+            # Do not set workflow status to FAILED here, to allow for retry.
 
             if isinstance(node, PNode) and node.get_status() in ['ended', 'failed', 'skipped']:
                 self._logger.info("Node: %s - %s - [ %s - %s]" % (node_id, node.get_status(),
@@ -394,11 +395,13 @@ class AnsibleWorkflow():
 
         self._logger.info(f"Approving node {node_id}")
         node.set_status(None)
-        if isinstance(node, CNode):
-            node.set_status(NodeStatus.RUNNING)
+        with self.__running_nodes_lock:
+            if isinstance(node, CNode):
+                node.set_status(NodeStatus.RUNNING)
+            else:
+                self.run_node(node_id)
+            # Re-add the node to the running list to allow the engine to process it
             self.add_running_node(node_id)
-        else:
-            self.run_node(node_id)
 
     def disapprove_node(self, node_id: str):
         node = self.get_node_object(node_id)
@@ -407,8 +410,15 @@ class AnsibleWorkflow():
             return
 
         self._logger.info(f"Disapproving node {node_id}")
-        node.set_status(NodeStatus.FAILED)
-        self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.FAILED, node)
+        with self.__running_nodes_lock:
+            if isinstance(node, CNode):
+                node.set_status(NodeStatus.FAILED)
+                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.FAILED, node)
+            else:
+                node.set_status(NodeStatus.SKIPPED)
+                self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.SKIPPED, node)
+            # Re-add the node to the running list to allow the engine to process its new terminal state
+            self.add_running_node(node_id)
 
 
     def run(self, start_node: str = "_s", end_node: str = "_e", verify_only: bool = False):
