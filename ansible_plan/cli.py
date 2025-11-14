@@ -57,7 +57,7 @@ def define_logger(logging_dir, level):
     return logger
 
 
-def check_and_start_backend(logger):
+def check_and_start_backend(logger, logging_dir):
     try:
         httpx.get(f"{BACKEND_URL}/health")
         logger.info("Backend is already running.")
@@ -67,8 +67,8 @@ def check_and_start_backend(logger):
 
         popen_kwargs = {
             "cwd": project_root,
-            "stdout": open(os.path.join(project_root, "backend_stdout.log"), "wb"),
-            "stderr": open(os.path.join(project_root, "backend_stderr.log"), "wb"),
+            "stdout": open(os.path.join(logging_dir, "backend_stdout.log"), "wb"),
+            "stderr": open(os.path.join(logging_dir, "backend_stderr.log"), "wb"),
         }
 
         if os.name == 'nt':
@@ -143,7 +143,7 @@ def read_options():
     parser.add_argument('-size', '--draw-size', dest='draw_size', default=10, type=int,
                         help='Choose the size of the draw graph')
 
-    parser.add_argument('--log-dir', dest='log_dir', default='logs',
+    parser.add_argument('--log-dir', dest='log_dir', default='/var/log/ansible/plan',
                         help='set the parent output logging directory. defaults to logs/[workflow name]-[execution time]')
 
     parser.add_argument('--log-dir-no-info', dest='log_dir_no_info', action='store_true',
@@ -174,7 +174,7 @@ def main():
     logger = define_logger(logging_dir, cmd_args.log_level)
     console = Console()
 
-    check_and_start_backend(logger)
+    check_and_start_backend(logger, logging_dir)
 
     extra_vars = {}
     for single_extra_vars in cmd_args.extra_vars:
@@ -192,8 +192,7 @@ def main():
         "end_to_node": cmd_args.end_to_node,
         "skip_nodes": cmd_args.skip_nodes.split(",") if cmd_args.skip_nodes else [],
         "filter_nodes": cmd_args.filter_nodes.split(",") if cmd_args.filter_nodes else [],
-        "log_dir": cmd_args.log_dir,
-        "log_dir_no_info": cmd_args.log_dir_no_info,
+        "log_dir": logging_dir,
         "log_level": cmd_args.log_level,
         "verify_only": cmd_args.verify_only,
         "doubtful_mode": cmd_args.doubtful_mode,
