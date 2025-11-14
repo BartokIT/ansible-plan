@@ -407,8 +407,12 @@ class AnsibleWorkflow():
             return
 
         self._logger.info(f"Disapproving node {node_id}")
-        node.set_status(NodeStatus.FAILED)
-        self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.FAILED, node)
+        if isinstance(node, CNode):
+            node.set_status(NodeStatus.FAILED)
+            self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.FAILED, node)
+        else:
+            node.set_status(NodeStatus.SKIPPED)
+            self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.SKIPPED, node)
 
 
     def run(self, start_node: str = "_s", end_node: str = "_e", verify_only: bool = False):
