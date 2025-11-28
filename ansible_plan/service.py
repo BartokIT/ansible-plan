@@ -47,6 +47,7 @@ class WorkflowStartRequest(BaseModel):
     log_level: str = "info"
     verify_only: bool = False
     doubtful_mode: bool = False
+    draw: bool = False
 
 
 @app.post("/workflow")
@@ -103,7 +104,7 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
         start_node = request.start_from_node if request.start_from_node else '_s'
         end_node = request.end_to_node if request.end_to_node else '_e'
 
-        background_tasks.add_task(aw.run, start_node=start_node, end_node=end_node, verify_only=request.verify_only)
+        background_tasks.add_task(aw.run, start_node=start_node, end_node=end_node, verify_only=request.verify_only, draw=request.draw)
 
     return {"status": WorkflowStatus.RUNNING}
 

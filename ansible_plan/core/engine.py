@@ -11,6 +11,7 @@ import logging
 import logging.handlers
 from .exceptions import AnsibleWorkflowDuplicateNodeId, AnsibleWorkflowPlaybookNodeCheck
 from .models import WorkflowStatus, NodeStatus, Node, BNode, PNode, CNode, INode, WorkflowEventType, WorkflowEvent, WorkflowListener
+from ..drawing.draw import draw_graph
 
 
 class AnsibleWorkflow():
@@ -102,9 +103,6 @@ class AnsibleWorkflow():
             )
             return False
         return True
-
-    def get_original_graph(self) -> nx.DiGraph:
-        return self.__original_graph
 
     def get_original_graph_edges(self) -> typing.List[typing.List[str]]:
         return [[u, v] for u, v in self.__original_graph.edges()]
@@ -417,15 +415,21 @@ class AnsibleWorkflow():
 
 
 
-    def run(self, start_node: str = "_s", end_node: str = "_e", verify_only: bool = False):
+    def run(self, start_node: str = "_s", end_node: str = "_e", verify_only: bool = False, draw: bool = False):
         '''
         Run the workflows starting from a graph node until reaching the end node.
         Args:
             start_node (string): The identifier of the starting node for the graph
             end_node (string): The identifier of the ending node for the graph
             verify_only (bool): A flag that skip the workflow run and verify only the correctness
+            draw (bool): A flag that generates a PNG image of the workflow graph
 
         '''
+
+        if draw:
+            out_file = os.path.join(self.__logging_dir, "workflow_graph")
+            draw_graph(self, out_file)
+            return
 
         # perform validation of the
         if not self.is_valid():
