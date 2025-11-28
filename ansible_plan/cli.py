@@ -134,8 +134,8 @@ def read_options():
     parser.add_argument('--mode', default='stdout', choices=["stdout", "visual"],
                         help='Render the progress using textual or stdout.')
 
-    parser.add_argument('-d', '--draw', dest='draw_png', action='store_true',
-                        help='Output also a PNG of the graph inside the log folder')
+    parser.add_argument('-d', '--draw', dest='draw', action='store_true',
+                        help='Generate a PNG of the graph inside the log folder and exit.')
 
     parser.add_argument('-dpi', '--draw-dpi', dest='draw_dpi', default=72, type=int,
                         help='Choose the dpi of the draw graph')
@@ -196,6 +196,7 @@ def main():
         "log_level": cmd_args.log_level,
         "verify_only": cmd_args.verify_only,
         "doubtful_mode": cmd_args.doubtful_mode,
+        "draw": cmd_args.draw,
     }
 
     try:
