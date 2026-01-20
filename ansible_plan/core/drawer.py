@@ -16,7 +16,7 @@ def generate_workflow_svg(workflow, output_path_prefix):
         dot = graphviz.Digraph(name='workflow', format='svg')
 
         # Global attributes - Light theme
-        dot.attr(rankdir='LR', compound='true', bgcolor='#ffffff', fontcolor='#212121', forcelabels='true')
+        dot.attr(rankdir='LR', compound='true', bgcolor='#ffffff', fontcolor='#212121', forcelabels='true', splines='ortho')
         dot.attr('node', shape='rect', style='filled,rounded', color='#757575', fontcolor='#212121', fillcolor='#e1f5fe', fontname='Arial')
         dot.attr('edge', color='#424242', fontcolor='#424242', fontname='Arial')
 
