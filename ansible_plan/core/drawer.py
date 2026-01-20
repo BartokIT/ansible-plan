@@ -48,8 +48,8 @@ def generate_workflow_svg(workflow, output_path_prefix):
                     fillcolor = '#ffffff'
 
             if isinstance(node_obj, BNode):
-                # Round (ellipse) with external label
-                dot.node(node_id, "", shape='ellipse', fillcolor=fillcolor, xlabel=label)
+                # Round (ellipse)
+                dot.node(node_id, label, shape='ellipse', fillcolor=fillcolor)
             elif isinstance(node_obj, PNode):
                 # Rounded rectangle
                 dot.node(node_id, label, shape='rect', style='filled,rounded', fillcolor=fillcolor)
