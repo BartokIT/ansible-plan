@@ -20,57 +20,39 @@ def generate_workflow_svg(workflow, output_path_prefix):
         dot.attr('node', shape='rect', style='filled,rounded', color='white', fontcolor='white', fillcolor='#1e4a6e', fontname='Arial')
         dot.attr('edge', color='white', fontcolor='white', fontname='Arial')
 
-        nodes_by_reference = {}
-
         for node_id in workflow.get_nodes():
             if node_id == '_root':
                 continue
 
             node_obj = workflow.get_node_object(node_id)
-            ref = node_obj.get_reference() or "Default"
+            label = node_id
 
-            if ref not in nodes_by_reference:
-                nodes_by_reference[ref] = []
-            nodes_by_reference[ref].append(node_id)
+            # Truncate label if too long
+            if len(label) > 40:
+                label = label[:37] + "..."
 
-        # Palette inspired by the image
-        palette = {
-            "CUSTOMER": "#f06292",
-            "SALES": "#ffa726",
-            "STOCKS": "#42a5f5",
-            "FINANCE": "#26c6da",
-            "DEFAULT": "#90a4ae"
-        }
+            if node_id == '_s':
+                fillcolor = "#4caf50"
+            elif node_id == '_e':
+                fillcolor = "#f44336"
+            else:
+                fillcolor = '#1e4a6e'
 
-        # Order lanes: put Default last
-        sorted_refs = sorted(nodes_by_reference.keys(), key=lambda x: (x == "Default", x))
-
-        for ref in sorted_refs:
-            lane_color = palette.get(ref.upper(), palette["DEFAULT"])
-            with dot.subgraph(name=f'cluster_{ref}') as c:
-                c.attr(label=ref, color=lane_color, fontcolor=lane_color, style='dashed')
-                for node_id in nodes_by_reference[ref]:
-                    node_obj = workflow.get_node_object(node_id)
-                    label = node_id
-
-                    if node_id == '_s':
-                        fillcolor = "#4caf50"
-                    elif node_id == '_e':
-                        fillcolor = "#f44336"
-                    else:
-                        fillcolor = '#1e4a6e'
-
-                    # Truncate label if too long
-                    if len(label) > 40:
-                        label = label[:37] + "..."
-
-                    shape = 'rect'
-                    if isinstance(node_obj, CNode):
-                        shape = 'diamond'
-                        # For diamonds, we might want a slightly different style
-                        c.node(node_id, label, shape=shape, fillcolor=fillcolor, height='1', width='1')
-                    else:
-                        c.node(node_id, label, shape=shape, fillcolor=fillcolor)
+            if isinstance(node_obj, BNode):
+                # Round (ellipse)
+                dot.node(node_id, label, shape='ellipse', fillcolor=fillcolor)
+            elif isinstance(node_obj, PNode):
+                # Rounded rectangle
+                dot.node(node_id, label, shape='rect', style='filled,rounded', fillcolor=fillcolor)
+            elif isinstance(node_obj, CNode):
+                # Diamond
+                dot.node(node_id, label, shape='diamond', fillcolor=fillcolor, height='1', width='1')
+            elif isinstance(node_obj, INode):
+                # Square rectangle (just filled, no rounded)
+                dot.node(node_id, label, shape='rect', style='filled', fillcolor=fillcolor)
+            else:
+                # Fallback
+                dot.node(node_id, label, fillcolor=fillcolor)
 
         # Edges
         # We use the execution graph for visualization as it represents the logical flow
