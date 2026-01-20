@@ -51,16 +51,13 @@ def generate_workflow_svg(workflow, output_path_prefix):
                 c.attr(label=ref, color=lane_color, fontcolor=lane_color, style='dashed')
                 for node_id in nodes_by_reference[ref]:
                     node_obj = workflow.get_node_object(node_id)
-                    description = node_obj.get_description()
+                    label = node_id
 
                     if node_id == '_s':
-                        label = "START"
                         fillcolor = "#4caf50"
                     elif node_id == '_e':
-                        label = "FINISH"
                         fillcolor = "#f44336"
                     else:
-                        label = description if description else node_id
                         fillcolor = '#1e4a6e'
 
                     # Truncate label if too long
