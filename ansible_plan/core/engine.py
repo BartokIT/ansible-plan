@@ -427,6 +427,16 @@ class AnsibleWorkflow():
 
         '''
 
+        # Generate the graph image
+        try:
+            from .drawer import generate_workflow_svg
+            output_path = os.path.join(self.__logging_dir, 'workflow')
+            generate_workflow_svg(self, output_path)
+        except ImportError:
+            self._logger.warning("graphviz not installed, skipping workflow SVG generation")
+        except Exception as e:
+            self._logger.error(f"Error generating workflow SVG: {e}")
+
         # perform validation of the
         if not self.is_valid():
             self.__running_status = WorkflowStatus.FAILED

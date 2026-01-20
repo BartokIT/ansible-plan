@@ -3,9 +3,9 @@ ansible-runner
 jsonschema
 pbr
 wheel
+graphviz
 # matplotlib
 # uncomment to generate graph file
-# graphviz
 # pygraphviz
 textual
 rich

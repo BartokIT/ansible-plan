@@ -54,11 +54,11 @@
                 },
                 "inventory": {
                     "description": "Allow to specify default inventory to be passed to the playbook execution",
-                    "type": "string"
+                    "type": ["string", "null"]
                 },
                 "project_path": {
                     "description": "Allow to specify default project path vars to be passed to the playbook execution",
-                    "type": "string"
+                    "type": ["string", "null"]
                 },
                 "limit": {
                     "description": "Allow to specify default limits parameter to be passed to the playbook execution",
@@ -103,23 +103,23 @@
                         },
                         "inventory": {
                             "description": "Allow to specify inventory to be passed to the playbook execution",
-                            "type": "string"
+                            "type": ["string", "null"]
                         },
                         "project_path": {
                             "description": "Allow to specify project path to be passed to the playbook execution.",
-                            "type": "string"
+                            "type": ["string", "null"]
                         },
                         "limit": {
                             "description": "Allow to specify limit to be passed to the playbook execution",
-                            "type": "string"
+                            "type": ["string", "null"]
                         },
                         "description": {
                             "description": "Describes what the node does",
-                            "type": "string"
+                            "type": ["string", "null"]
                         },
                         "reference": {
                             "description": "Tells who is the owner of the task",
-                            "type": "string"
+                            "type": ["string", "null"]
                         }
                     },
                     "additionalProperties": false,
@@ -148,6 +148,14 @@
                         "templating": {
                             "description": "Contains variable for templating",
                             "type": "object"
+                        },
+                        "description": {
+                            "description": "Describes what the node does",
+                            "type": ["string", "null"]
+                        },
+                        "reference": {
+                            "description": "Tells who is the owner of the task",
+                            "type": ["string", "null"]
                         }
                     },
                     "additionalProperties": false,
@@ -191,11 +199,11 @@
                         },
                         "description": {
                             "description": "Describes what the node does",
-                            "type": "string"
+                            "type": ["string", "null"]
                         },
                         "reference": {
                             "description": "Tells who is the owner of the task",
-                            "type": "string"
+                            "type": ["string", "null"]
                         }
                     },
                     "additionalProperties": false,
@@ -211,11 +219,11 @@
                         },
                         "description": {
                             "description": "Describes what the node does",
-                            "type": "string"
+                            "type": ["string", "null"]
                         },
                         "reference": {
                             "description": "Tells who is the owner of the task",
-                            "type": "string"
+                            "type": ["string", "null"]
                         }
                     },
                     "additionalProperties": false,

@@ -34,7 +34,7 @@ class Node():
     ''' An abstract Node class of the graph'''
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, id: str):
+    def __init__(self, id: str, description='', reference=''):
         '''
         Initialize a generic node of the graph
         Args:
@@ -48,6 +48,8 @@ class Node():
         self._ended_time: datetime = None
         self.__skipped = False
         self._status: typing.Optional[NodeStatus] = None
+        self.__description = description
+        self.__reference = reference
 
     def get_id(self) -> str:
         return self.__id
@@ -81,6 +83,12 @@ class Node():
     def get_type(self):
         pass
 
+    def get_description(self):
+        return self.__description
+
+    def get_reference(self):
+        return self.__reference
+
     def set_ended_time(self, time):
         self._ended_time = time
 
@@ -93,6 +101,9 @@ class Node():
 
 
 class BNode(Node):
+    def __init__(self, id, description='', reference=''):
+        super(BNode, self).__init__(id, description, reference)
+
     def get_status(self):
         if self._status:
             return self._status
@@ -104,7 +115,7 @@ class BNode(Node):
 
 class PNode(Node):
     def __init__(self, id, playbook, inventory, artifact_dir, limit=None, project_path=None, extra_vars={}, vault_ids=[], check_mode=False, diff_mode=True, verbosity=1, description='', reference=''):
-        super(PNode, self).__init__(id)
+        super(PNode, self).__init__(id, description, reference)
         self.__playbook = playbook
         self.__inventory = inventory
         self.__extravars = extra_vars
@@ -117,16 +128,14 @@ class PNode(Node):
         self.__check_mode = check_mode
         self.__diff_mode = diff_mode
         self.__verbosity = verbosity
-        self.__description = description
-        self.__reference = reference
         self.__hard_stop = False
 
     def check_node_input(self):
         # convert project path in absolute path
-        if not os.path.isabs(self.__project_path):
+        if self.__project_path and not os.path.isabs(self.__project_path):
             self.__project_path = os.path.abspath(self.__project_path)
 
-        if not os.path.exists(self.__project_path):
+        if self.__project_path and not os.path.exists(self.__project_path):
             raise AnsibleWorkflowPlaybookNodeCheck(
                 "Node %s project path %s doesn't exists" % (self.get_id(), self.__project_path)
             )
@@ -190,12 +199,6 @@ class PNode(Node):
     def get_extravars(self):
         return self.__extravars
 
-    def get_description(self):
-        return self.__description
-
-    def get_reference(self):
-        return self.__reference
-
     def stop(self):
         self._logger.info("Stopping node %s" % self.get_id())
         self.__hard_stop = True
@@ -257,9 +260,7 @@ class PNode(Node):
 
 class INode(Node):
     def __init__(self, id, description='', reference=''):
-        super(INode, self).__init__(id)
-        self.__description = description
-        self.__reference = reference
+        super(INode, self).__init__(id, description, reference)
 
     def get_status(self):
         if self._status:
@@ -269,18 +270,10 @@ class INode(Node):
     def get_type(self):
         return 'info'
 
-    def get_description(self):
-        return self.__description
-
-    def get_reference(self):
-        return self.__reference
-
 
 class CNode(Node):
     def __init__(self, id, description='', reference=''):
-        super(CNode, self).__init__(id)
-        self.__description = description
-        self.__reference = reference
+        super(CNode, self).__init__(id, description, reference)
 
     def get_status(self):
         if self._status:
@@ -289,12 +282,6 @@ class CNode(Node):
 
     def get_type(self):
         return 'checkpoint'
-
-    def get_description(self):
-        return self.__description
-
-    def get_reference(self):
-        return self.__reference
 
 
 class WorkflowEventType(Enum):

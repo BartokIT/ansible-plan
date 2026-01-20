@@ -434,7 +434,7 @@ class WorkflowYamlLoader(WorkflowLoader):
 
             # generate the object representing the graph
             if 'block' in inode:
-                gnode = BNode(gnode_id)
+                gnode = BNode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
                 block_sub_nodes = self._parse_workflow_v1(inode['block'], [gnode, ], inode.get('strategy', 'parallel'), defaults, options, level + 1, gnode_id)
             else:
                 if 'import_playbook' in inode:
@@ -459,9 +459,9 @@ class WorkflowYamlLoader(WorkflowLoader):
 
                     # prepend global path to project and inventory
                     if options.get("global_path", False):
-                        if not os.path.isabs(pnode_parameters["project_path"]):
+                        if pnode_parameters.get("project_path") and not os.path.isabs(pnode_parameters["project_path"]):
                             pnode_parameters["project_path"] = os.path.join(options["global_path"], pnode_parameters["project_path"])
-                        if not os.path.isabs(pnode_parameters["inventory"]):
+                        if pnode_parameters.get("inventory") and not os.path.isabs(pnode_parameters["inventory"]):
                             pnode_parameters["inventory"] = os.path.join(options["global_path"], pnode_parameters["inventory"])
 
                     # add the vault script to all vault id
