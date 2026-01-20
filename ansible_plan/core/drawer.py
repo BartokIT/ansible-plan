@@ -15,10 +15,10 @@ def generate_workflow_svg(workflow, output_path_prefix):
     try:
         dot = graphviz.Digraph(name='workflow', format='svg')
 
-        # Global attributes
-        dot.attr(rankdir='LR', compound='true', bgcolor='#0d2c4b', fontcolor='white')
-        dot.attr('node', shape='rect', style='filled,rounded', color='white', fontcolor='white', fillcolor='#1e4a6e', fontname='Arial')
-        dot.attr('edge', color='white', fontcolor='white', fontname='Arial')
+        # Global attributes - Light theme
+        dot.attr(rankdir='LR', compound='true', bgcolor='#ffffff', fontcolor='#212121', forcelabels='true')
+        dot.attr('node', shape='rect', style='filled,rounded', color='#757575', fontcolor='#212121', fillcolor='#e1f5fe', fontname='Arial')
+        dot.attr('edge', color='#424242', fontcolor='#424242', fontname='Arial')
 
         for node_id in workflow.get_nodes():
             if node_id == '_root':
@@ -32,15 +32,24 @@ def generate_workflow_svg(workflow, output_path_prefix):
                 label = label[:37] + "..."
 
             if node_id == '_s':
-                fillcolor = "#4caf50"
+                fillcolor = "#c8e6c9" # Pastel Green
             elif node_id == '_e':
-                fillcolor = "#f44336"
+                fillcolor = "#ffcdd2" # Pastel Red
             else:
-                fillcolor = '#1e4a6e'
+                if isinstance(node_obj, BNode):
+                    fillcolor = "#eeeeee" # Light Gray
+                elif isinstance(node_obj, PNode):
+                    fillcolor = "#e1f5fe" # Pastel Blue
+                elif isinstance(node_obj, CNode):
+                    fillcolor = "#ffe0b2" # Pastel Orange
+                elif isinstance(node_obj, INode):
+                    fillcolor = "#f3e5f5" # Pastel Purple
+                else:
+                    fillcolor = '#ffffff'
 
             if isinstance(node_obj, BNode):
-                # Round (ellipse)
-                dot.node(node_id, label, shape='ellipse', fillcolor=fillcolor)
+                # Round (ellipse) with external label
+                dot.node(node_id, "", shape='ellipse', fillcolor=fillcolor, xlabel=label)
             elif isinstance(node_obj, PNode):
                 # Rounded rectangle
                 dot.node(node_id, label, shape='rect', style='filled,rounded', fillcolor=fillcolor)
