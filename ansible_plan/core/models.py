@@ -7,6 +7,14 @@ import logging
 import ansible_runner
 from .exceptions import AnsibleWorkflowPlaybookNodeCheck
 
+# ansible-runner hardcodes 0o700 on the directories and 0o600 on the files it
+# writes inside artifact_dir (see ansible_runner/runner.py and
+# ansible_runner/utils/__init__.py). Neither the process umask nor a default
+# ACL on the parent directory can override that, so the artifacts have to be
+# relaxed after the run through the artifacts_handler callback.
+ARTIFACT_DIR_MODE = 0o755
+ARTIFACT_FILE_MODE = 0o755
+
 
 class WorkflowStatus(Enum):
     """ Define the character for the application"""
@@ -212,6 +220,27 @@ class PNode(Node):
         self._started_time = None
         self._ended_time = None
 
+    def _relax_artifact_permissions(self, artifact_dir):
+        '''
+        Callback invoked by ansible-runner once every artifact of the run has
+        been written, to widen the permissions it forces on them.
+
+        Args:
+            artifact_dir (string): The per-node artifact directory
+                (<log_dir>/<ident>) as resolved by ansible-runner.
+        '''
+        for root, _dirs, files in os.walk(artifact_dir):
+            try:
+                os.chmod(root, ARTIFACT_DIR_MODE)
+            except OSError as err:
+                self._logger.warning("Cannot set permissions on %s: %s" % (root, err))
+            for name in files:
+                file_path = os.path.join(root, name)
+                try:
+                    os.chmod(file_path, ARTIFACT_FILE_MODE)
+                except OSError as err:
+                    self._logger.warning("Cannot set permissions on %s: %s" % (file_path, err))
+
     def run(self):
         self.set_started_time(datetime.now())
         self.__inventory = os.path.abspath(self.__inventory)
@@ -252,6 +281,7 @@ class PNode(Node):
                                                                     'suppress_ansible_output': True
                                                                 },
                                                                 cancel_callback=self._cancel_callback,
+                                                                artifacts_handler=self._relax_artifact_permissions,
                                                                 # vault_ids=self.__vault_ids,
                                                                 cmdline=playbook_cmd_line,
                                                                 extravars=self.__extravars,
