@@ -1,0 +1,8 @@
+---
+- name: Playbook a
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Task of playbook a
+      ansible.builtin.debug:
+        msg: playbook a

@@ -32,6 +32,12 @@ include = [
     "ansible_plan/**"
 ]
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning",
+]
+
 [tool.flake8]
 ignore = ["W503"]
 max-line-length = 160
