@@ -210,8 +210,11 @@ class AnsibleWorkflow():
     def stop(self, mode: str = 'graceful'):
         self._logger.info(f"Stop requested with mode: {mode}")
         self.__stopping = True
-        self.__running_status = WorkflowStatus.STOPPING
-        self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, f"Workflow stopping ({mode})")
+        # a run that already reached the end has nothing left to stop, and
+        # reporting it as stopping would misrepresent a finished workflow
+        if self.__running_status != WorkflowStatus.ENDED:
+            self.__running_status = WorkflowStatus.STOPPING
+            self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, f"Workflow stopping ({mode})")
         if mode == 'hard':
             for node_id in self.get_running_nodes():
                 node = self.get_node_object(node_id)
@@ -238,15 +241,23 @@ class AnsibleWorkflow():
         return False
 
     def get_some_failed_task(self):
-        some_failed_tasks = False
-        for node_id in self.get_nodes():
-            if self.get_node_object(node_id).get_status() not in [NodeStatus.ENDED, NodeStatus.SKIPPED]:
-                # print('--nodeid({}) KO {}'.format(node_id, self.get_node_object(node_id).get_status()))
-                some_failed_tasks = True
-            else:
-                # print('--nodeid({}) ok {}'.format(node_id, self.get_node_object(node_id).get_status()))
-                pass
-        return some_failed_tasks
+        '''
+        Tell whether the run has something a retry could act on.
+
+        Only a node that actually failed or was stopped counts. A node that
+        simply never ran does not: _root is bookkeeping for the tree the UIs
+        draw and is never part of a run, and _e is the end marker that
+        __run_step deliberately does not promote, so both sit on NOT_STARTED
+        for ever. Counting those as failures made every successful workflow
+        end up FAILED, parked waiting for a retry that had nothing to retry.
+        '''
+        return len(self.get_failed_nodes()) > 0
+
+    def get_failed_nodes(self) -> typing.List[str]:
+        '''The nodes restart_failed_node or skip_failed_node can be called on.'''
+        return [node_id for node_id in self.get_nodes()
+                if self.get_node_object(node_id).get_status() in [NodeStatus.FAILED,
+                                                                  NodeStatus.STOPPED]]
 
     def __run_step(self, end_node="_e"):
         self._logger.debug(f"__run_step: running_nodes={self.__running_nodes}")
@@ -329,15 +340,19 @@ class AnsibleWorkflow():
         # set skipped nodes from filtered nodes
         for node in self.__skipped_nodes:
             self.get_node_object(node).set_skipped()
-        # skipped from start
-        self._logger.info("Setting skipped %s" % self.__graph.in_edges(start_node))
-        skipped_from_start = [s for s, _ in self.__graph.in_edges(start_node)]
-        while len(skipped_from_start) > 0:
-            actual_node_id = skipped_from_start.pop()
-            actual_node = self.get_node_object(actual_node_id)
-            actual_node.set_skipped()
-            for prev, _ in self.__graph.in_edges(actual_node.get_id()):
-                skipped_from_start.append(prev)
+
+        # Everything the run cannot reach from the start node is skipped, not
+        # only what precedes it. Walking back the in edges alone left a branch
+        # running beside the start node in an enclosing parallel block on
+        # NOT_STARTED, and since a node is runnable only once every previous
+        # node is ENDED or SKIPPED, that branch blocked the join below it for
+        # good: the rest of the workflow was dropped without a word.
+        reachable = nx.descendants(self.__graph, start_node) | {start_node}
+        unreachable = [node_id for node_id in self.__graph.nodes
+                       if node_id not in reachable and node_id != '_root']
+        self._logger.info("Setting skipped, unreachable from %s: %s" % (start_node, unreachable))
+        for node_id in unreachable:
+            self.get_node_object(node_id).set_skipped()
 
         skipped_after_end = [e for _, e in self.__graph.out_edges(end_node)]
         while len(skipped_after_end) > 0:

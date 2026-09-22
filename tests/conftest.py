@@ -44,6 +44,30 @@ def reset_loggers():
             logger.removeHandler(handler)
 
 
+@pytest.fixture(autouse=True)
+def stop_leftover_runs():
+    '''
+    Shut down every run a test started.
+
+    A test that deliberately leaves a run in flight - anything using
+    ``fake_runner.hold`` - would otherwise keep driving it afterwards: the
+    engine thread is a daemon and survives the test, and when it starts the
+    next node it calls whatever ``ansible_runner.run_async`` points at by
+    then, which is the *next* test's double. The stray call lands in that
+    test's recorded calls and breaks assertions that have nothing to do with
+    it.
+    '''
+    yield
+    while _ACTIVE_RUNS:
+        workflow, thread = _ACTIVE_RUNS.pop()
+        workflow.stop('hard')
+        # release whatever the run is waiting on, or it never leaves its loop
+        for runner in _FAKE_RUNNERS:
+            runner.finish_all('canceled')
+        thread.join(timeout=10)
+    del _FAKE_RUNNERS[:]
+
+
 @pytest.fixture
 def log_dir(tmp_path):
     '''The directory a run writes its logs and ansible-runner artifacts to.'''
@@ -118,6 +142,10 @@ class FakeJob:
         self.done = True
 
 
+_ACTIVE_RUNS = []
+_FAKE_RUNNERS = []
+
+
 class FakeAnsibleRunner:
     '''
     Records every ``run_async`` call and decides what each node does.
@@ -134,6 +162,7 @@ class FakeAnsibleRunner:
         self.statuses = {}
         self.default_status = 'successful'
         self.hold = False
+        _FAKE_RUNNERS.append(self)
 
     def run_async(self, **kwargs):
         self.calls.append(kwargs)
@@ -147,6 +176,10 @@ class FakeAnsibleRunner:
     # helpers for the tests -------------------------------------------------
     def finish(self, ident, status='successful'):
         self.jobs[ident].finish(status)
+
+    def finish_all(self, status='successful'):
+        for job in self.jobs.values():
+            job.finish(status)
 
     def idents(self):
         return [call['ident'] for call in self.calls]
@@ -183,7 +216,13 @@ def wait_for(predicate, timeout=15, message='condition not reached'):
 
 
 def run_in_thread(workflow: AnsibleWorkflow, **kwargs):
-    '''Start ``AnsibleWorkflow.run`` in the background; it blocks until done.'''
+    '''
+    Start ``AnsibleWorkflow.run`` in the background.
+
+    The run is registered so ``stop_leftover_runs`` can shut it down at the
+    end of the test.
+    '''
     thread = threading.Thread(target=workflow.run, kwargs=kwargs, daemon=True)
     thread.start()
+    _ACTIVE_RUNS.append((workflow, thread))
     return thread

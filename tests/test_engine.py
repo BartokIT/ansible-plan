@@ -5,11 +5,10 @@ The engine advances by polling, so these tests start ``run()`` in a background
 thread and wait for the state they expect. No playbook is executed: the
 ``fake_runner`` fixture decides the outcome of every node.
 
-Note on the terminal status: a run currently settles on WorkflowStatus.FAILED
-even when every playbook succeeded (see test_terminal_status.py). These tests
-therefore wait for the run to *settle* and assert on what actually happened -
-which nodes ran, in which order, with which status - rather than on the
-workflow status enum.
+These tests wait for the run to *settle* and then assert on what actually
+happened - which nodes ran, in which order, with which status - rather than on
+the workflow status alone, which says far less about whether the engine did the
+right thing. The terminal status itself is covered by test_terminal_status.py.
 '''
 import os
 

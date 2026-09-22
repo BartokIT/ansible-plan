@@ -68,10 +68,9 @@ def start_running(client, write_wf, log_dir):
     '''
     Start a workflow that actually executes its nodes.
 
-    ``AnsibleWorkflow.run`` does not return on its own once a run settles (it
-    parks waiting for a retry decision), and TestClient waits for background
-    tasks, so the request is issued from a thread and released with stop()
-    the way the CLI does it through /shutdown.
+    TestClient waits for background tasks, and a run that fails parks waiting
+    for a retry decision instead of returning, so the request is issued from a
+    thread and released with stop() the way the CLI does through /shutdown.
     '''
     responses = {}
 

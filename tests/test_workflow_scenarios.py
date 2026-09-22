@@ -396,32 +396,27 @@ def test_starting_inside_a_nested_block_runs_that_branch(write_wf, load, fake_ru
     assert {'b1.2.2.1', 'b1.2.2.2', 'b1.2.3'} <= set(fake_runner.idents())
 
 
-def test_starting_inside_a_block_strands_the_sibling_branch(write_wf, load, fake_runner):
+def test_starting_inside_a_block_skips_the_sibling_branch(write_wf, load, fake_runner):
     """
-    _set_skipped_nodes only walks back along the in edges of the start node, so
-    a branch running beside it in an enclosing parallel block is neither run
-    nor skipped. It stays NOT_STARTED, and since is_node_runnable accepts only
-    ENDED or SKIPPED predecessors it blocks the join for good.
+    A branch running beside the start node in an enclosing parallel block is
+    not reachable from it, so it is skipped rather than left NOT_STARTED.
+    It used to stay NOT_STARTED, and since is_node_runnable accepts only
+    ENDED or SKIPPED predecessors that blocked the join below it for good.
     """
     workflow = load(write_wf(NESTED))
     run_in_thread(workflow, start_node='b1.2.2')
     settle(workflow)
 
     sibling = workflow.get_node_object('b1.1')
-    assert sibling.get_status() == NodeStatus.NOT_STARTED
-    assert sibling.is_skipped() is False
-
-    # so everything past the join is silently dropped
-    assert workflow.get_node_object('s2').get_status() == NodeStatus.NOT_STARTED
-    assert 's2' not in fake_runner.idents()
+    assert sibling.is_skipped() is True
+    assert sibling.get_status() == NodeStatus.SKIPPED
+    assert 'b1.1' not in fake_runner.idents()
 
 
-@pytest.mark.xfail(reason='known bug: a parallel branch beside the start node is '
-                          'left NOT_STARTED and blocks the join, so --start-from-node '
-                          'on a node inside a block silently truncates the workflow')
 def test_starting_inside_a_nested_block_still_reaches_the_end(write_wf, load, fake_runner):
     workflow = load(write_wf(NESTED))
     run_in_thread(workflow, start_node='b1.2.2')
     settle(workflow)
 
-    assert 's2' in fake_runner.idents()
+    assert set(fake_runner.idents()) == {'b1.2.2.1', 'b1.2.2.2', 'b1.2.3', 's2'}
+    assert workflow.get_running_status() == WorkflowStatus.ENDED

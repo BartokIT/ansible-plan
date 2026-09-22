@@ -116,9 +116,6 @@ def test_comma_in_node_id_is_rejected(write_wf, load):
         load(write_wf(workflow))
 
 
-@pytest.mark.xfail(reason="known bug: _perform_static_inclusion reads inode['id'] "
-                          "before _parse_workflow_v1 can generate one, so the "
-                          "auto generated ids the README promises raise KeyError")
 def test_missing_id_gets_generated(write_wf, load):
     workflow = '''---
 defaults:
@@ -130,6 +127,26 @@ workflow:
 
     assert len(generated) == 1
     assert len(generated.pop()) == 5
+
+
+def test_a_generated_id_is_prefixed_like_any_other(write_wf, load):
+    write_wf("""---
+id: ignored
+block:
+  - import_playbook: playbooks/a.yml
+""", name='_block.yml')
+    workflow = """---
+defaults:
+  inventory: inventory.ini
+workflow:
+  - id: inc
+    include_block: _block.yml
+    id_prefix: sub
+"""
+    generated = set(load(write_wf(workflow)).get_nodes()) - {'_root', '_s', '_e', 'inc'}
+
+    assert len(generated) == 1
+    assert generated.pop().startswith('sub')
 
 
 def test_numeric_ids_are_coerced_to_strings(write_wf, load):

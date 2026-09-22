@@ -290,6 +290,10 @@ class WorkflowYamlLoader(WorkflowLoader):
         # call the parser of the workflow key, starting with a serial strategy
         self._parse_workflow_v1(to_be_imported=self.__yaml_parsed['workflow'], parent_nodes=[], strategy='serial', defaults=defaults, options=options)
 
+    def _generate_node_id(self) -> str:
+        '''Build the identifier of a node that does not declare one.'''
+        return ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
+
     def _perform_string_template_rendering(self, template_string: str, template_variables: typing.Dict[str, typing.Any]):
         try:
             template = self._template_env.from_string(template_string)
@@ -381,6 +385,10 @@ class WorkflowYamlLoader(WorkflowLoader):
 
                 self._perform_static_inclusion(inode['block'], options, included_block_prefix, template_variables=current_template_variables)
             elif 'block' in inode:
+                # the id has to exist before the prefix of an including block
+                # can be applied to it, so it is generated here rather than in
+                # _parse_workflow_v1, which only runs once inclusion is done
+                inode.setdefault('id', self._generate_node_id())
                 inode['id'] = str(prefix) + str(inode['id'])
                 if 'templating' in inode:
                     current_template_variables.update(inode['templating'])
@@ -388,6 +396,7 @@ class WorkflowYamlLoader(WorkflowLoader):
                 # perform also a render of the remaining field of a block after the leaf node are rendered
                 self._perform_template_rendering(inode, template_variables=current_template_variables)
             else:
+                inode.setdefault('id', self._generate_node_id())
                 inode['id'] = str(prefix) + str(inode['id'])
                 self._logger.info("Templating block: %s - with variables: %s" % (inode['id'], current_template_variables))
                 # perform the render on the lead of a tree
@@ -415,7 +424,7 @@ class WorkflowYamlLoader(WorkflowLoader):
         zero_outdegree_nodes = []
         for inode in to_be_imported:
             # generate a node identifier and set to the node
-            gnode_id = inode.get('id', ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5)))
+            gnode_id = inode.get('id') or self._generate_node_id()
             gnode_id = str(gnode_id)
             inode['id'] = gnode_id
 
