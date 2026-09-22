@@ -2,10 +2,13 @@ import httpx
 import logging
 from typing import List, Dict, Any, Optional
 
+from .. import ipc
+
+
 class ApiClient:
-    def __init__(self, base_url: str, logger=None):
-        self.base_url = base_url
-        self.client = httpx.Client(base_url=self.base_url)
+    def __init__(self, socket_path: str, logger=None):
+        self.socket_path = socket_path
+        self.client = ipc.build_client(socket_path)
         self.logger = logger or logging.getLogger(__name__)
 
     def get_workflow_status(self) -> Optional[Dict[str, Any]]:

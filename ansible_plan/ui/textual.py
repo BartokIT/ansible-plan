@@ -121,10 +121,10 @@ class NullHighlighter(Highlighter):
 class TextualWorkflowOutput(WorkflowOutput):
     _log_name = 'textual.log'
 
-    def __init__(self, backend_url, event, logging_dir, log_level, cmd_args):
+    def __init__(self, socket_path, event, logging_dir, log_level, cmd_args):
         # We don't call super().__init__ because Textual has its own way of running.
         self._define_logger(logging_dir, log_level)
-        self.api_client = ApiClient(backend_url, logger=self._logger)
+        self.api_client = ApiClient(socket_path, logger=self._logger)
         self.cmd_args = cmd_args
         self._WorkflowOutput__verify_only = cmd_args.verify_only
         self.app = self.WorkflowApp(self, cmd_args)

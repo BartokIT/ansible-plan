@@ -11,10 +11,10 @@ from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List
 
-uvicorn_log_config_file='/tmp/ansible_plan_service_log.json'
 class StopWorkflowRequest(BaseModel):
     mode: str = "graceful"
 
+from . import ipc
 from .core.loader import WorkflowYamlLoader
 from .core.engine import AnsibleWorkflow
 from .core.models import NodeStatus, WorkflowStatus, PNode, INode, CNode
@@ -281,6 +281,7 @@ def health_check():
 
 def define_logger(logging_dir, level):
     common_format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    uvicorn_log_config_file = os.path.join(logging_dir, 'uvicorn_log_config.json')
     logger_file_path = os.path.join(logging_dir, 'service.log')
     if not os.path.exists(os.path.dirname(logger_file_path)):
         os.makedirs(os.path.dirname(logger_file_path))
@@ -301,7 +302,7 @@ def define_logger(logging_dir, level):
     conf_uvicorn['root']={'level': level.upper(),'handlers':['default'],'propgate':True}
     with open(uvicorn_log_config_file, "w") as file:
         json.dump(conf_uvicorn, file, indent=4) # Use indent for pretty formattin
-    return logger
+    return uvicorn_log_config_file
 
 def read_options():
     parser = argparse.ArgumentParser(description='This is the server side of the Aansi mimics the AWX/Ansible Tower® workflows from command line.')
@@ -311,11 +312,37 @@ def read_options():
     parser.add_argument('--log-level', dest='log_level', default='info', choices=["debug", "info", "warning", "error", "critical"],
                         help='set the logging level. defaults to info')
 
+    parser.add_argument('--socket', dest='socket', default=None,
+                        help='unix socket to listen on. defaults to %s' % ipc.DEFAULT_SOCKET_PATH)
+
     return parser.parse_args()
 
 
-if __name__ == "__main__":
+def serve(socket_path, log_config):
+    '''
+    Listen on the session socket.
+
+    uvicorn opens a unix socket with mode 0666, so the socket is tightened as
+    soon as it is bound. The directory it sits in is the real access gate, but
+    a mode nobody outside the group can use is worth having anyway.
+    '''
     import uvicorn
+
+    class SessionServer(uvicorn.Server):
+        async def startup(self, sockets=None):
+            await super().startup(sockets=sockets)
+            os.chmod(socket_path, ipc.SOCKET_MODE)
+
+    config = uvicorn.Config(app, uds=socket_path, log_config=log_config)
+    SessionServer(config).run()
+
+
+if __name__ == "__main__":
     cmd_args = read_options()
-    define_logger(cmd_args.log_dir,cmd_args.log_level)
-    uvicorn.run(app, host="0.0.0.0", port=8001, log_config=uvicorn_log_config_file)
+    log_config = define_logger(cmd_args.log_dir, cmd_args.log_level)
+
+    socket_path = ipc.socket_path(cmd_args.socket)
+    ipc.ensure_socket_dir(socket_path, group=os.environ.get(ipc.GROUP_ENV_VAR))
+    ipc.remove_stale_socket(socket_path)
+
+    serve(socket_path, log_config)

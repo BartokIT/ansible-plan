@@ -6,12 +6,13 @@ parameters and then only renders. These tests check the option parsing and
 that client/backend contract, with the backend and the UI stubbed out.
 '''
 import os
+import socket
 import sys
 
 import httpx
 import pytest
 
-from ansible_plan import cli
+from ansible_plan import cli, ipc
 
 
 @pytest.fixture
@@ -70,6 +71,12 @@ def test_input_templating_accumulates(argv):
     argv('workflow.yml', '-it', 'k1=v1', '--input-templating', 'k2=v2')
 
     assert cli.read_options().input_templating == [['k1', 'v1'], ['k2', 'v2']]
+
+
+def test_the_socket_option_defaults_to_none(argv):
+    argv('workflow.yml')
+
+    assert cli.read_options().socket is None
 
 
 def test_verbosity_counts_the_v_flags(argv):
@@ -134,26 +141,58 @@ class FakeResponse:
         return self._payload
 
 
-def test_an_already_running_backend_is_reused(monkeypatch, tmp_path, caplog):
-    spawned = []
-    monkeypatch.setattr(cli.httpx, 'get', lambda url: FakeResponse())
-    monkeypatch.setattr(cli.subprocess, 'Popen', lambda *a, **k: spawned.append(a))
+class StubClient:
+    """
+    Stands in for the httpx client bound to the session socket.
 
-    result = cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path))
+    ``failures`` makes the first N calls look like a backend that is not
+    listening yet, which is how a socket with nothing behind it behaves.
+    """
+
+    def __init__(self, failures=0, always_fail=False, status='failed'):
+        self.failures = failures
+        self.always_fail = always_fail
+        self.status = status
+        self.calls = []
+        self.posted = []
+        self.post_error = None
+
+    def get(self, path, **kwargs):
+        self.calls.append(('GET', path))
+        if self.always_fail or self.failures > 0:
+            self.failures -= 1
+            raise httpx.ConnectError('nothing is listening on the socket')
+        return FakeResponse({'status': self.status})
+
+    def post(self, path, json=None, timeout=None):
+        self.calls.append(('POST', path))
+        self.posted.append((path, json))
+        if self.post_error:
+            raise self.post_error
+        return FakeResponse({'status': 'running'})
+
+
+@pytest.fixture
+def session_socket(tmp_path):
+    return str(tmp_path / 's.sock')
+
+
+def test_an_already_running_session_is_joined(monkeypatch, tmp_path, session_socket):
+    # a session is shared: finding a backend means attaching to it, not
+    # starting a second one
+    spawned = []
+    monkeypatch.setattr(cli.subprocess, 'Popen', lambda *a, **k: spawned.append(a))
+    client = StubClient()
+
+    result = cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path),
+                                         session_socket, client)
 
     assert result is None
     assert spawned == []
+    assert client.calls == [('GET', '/health')]
 
 
-def test_a_missing_backend_is_spawned_detached(monkeypatch, tmp_path):
-    attempts = {'count': 0}
-
-    def flaky_get(url):
-        attempts['count'] += 1
-        if attempts['count'] == 1:
-            raise httpx.ConnectError('no backend yet')
-        return FakeResponse()
-
+def test_a_missing_backend_is_spawned_detached(monkeypatch, tmp_path, session_socket):
     calls = {}
 
     def fake_popen(command, **kwargs):
@@ -161,27 +200,50 @@ def test_a_missing_backend_is_spawned_detached(monkeypatch, tmp_path):
         calls['kwargs'] = kwargs
         return 'the-process'
 
-    monkeypatch.setattr(cli.httpx, 'get', flaky_get)
     monkeypatch.setattr(cli.subprocess, 'Popen', fake_popen)
 
-    cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path))
+    cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path),
+                               session_socket, StubClient(failures=1))
 
     assert calls['command'] == [sys.executable, '-m', 'ansible_plan.service',
-                                '--log-dir', str(tmp_path)]
-    # detached, so the backend outlives the CLI and can be re-attached to
+                                '--log-dir', str(tmp_path), '--socket', session_socket]
+    # detached, so the session outlives the front end and can be re-joined
     assert calls['kwargs']['start_new_session'] is True
 
 
-def test_a_backend_that_never_answers_aborts(monkeypatch, tmp_path):
-    def always_refused(url):
-        raise httpx.ConnectError('never up')
+def test_a_socket_left_by_a_dead_backend_is_removed(monkeypatch, tmp_path, session_socket):
+    # binding over an existing socket file fails with EADDRINUSE, so the
+    # leftover of a crashed backend has to go before spawning a new one
+    dead = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    dead.bind(session_socket)
+    dead.close()
+    assert os.path.exists(session_socket)
 
-    monkeypatch.setattr(cli.httpx, 'get', always_refused)
+    monkeypatch.setattr(cli.subprocess, 'Popen', lambda *a, **k: 'the-process')
+
+    cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path),
+                               session_socket, StubClient(failures=1))
+
+    assert not os.path.exists(session_socket)
+
+
+def test_the_socket_directory_is_created_when_missing(monkeypatch, tmp_path):
+    session_socket = str(tmp_path / 'run' / 's.sock')
+    monkeypatch.setattr(cli.subprocess, 'Popen', lambda *a, **k: 'the-process')
+
+    cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path),
+                               session_socket, StubClient(failures=1))
+
+    assert os.path.isdir(str(tmp_path / 'run'))
+
+
+def test_a_backend_that_never_answers_aborts(monkeypatch, tmp_path, session_socket):
     monkeypatch.setattr(cli.subprocess, 'Popen', lambda *a, **k: 'the-process')
     monkeypatch.setattr(cli.time, 'sleep', lambda seconds: None)
 
     with pytest.raises(SystemExit):
-        cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path))
+        cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path),
+                                    session_socket, StubClient(always_fail=True))
 
 
 # --------------------------------------------------------------------------
@@ -221,19 +283,15 @@ class StubOutput:
 @pytest.fixture
 def stub_frontend(monkeypatch):
     StubOutput.instances = []
-    posted = []
+    client = StubClient()
 
-    def fake_post(url, json=None, timeout=None):
-        posted.append((url, json))
-        return FakeResponse({'status': 'running'})
-
-    monkeypatch.setattr(cli, 'check_and_start_backend', lambda logger, log_dir: None)
+    monkeypatch.setattr(cli, 'check_and_start_backend',
+                        lambda logger, log_dir, socket_path, client: None)
+    monkeypatch.setattr(cli.ipc, 'build_client', lambda path, **kwargs: client)
     monkeypatch.setattr(cli, 'Console', StubConsole)
     monkeypatch.setattr(cli, 'StdoutWorkflowOutput', StubOutput)
     monkeypatch.setattr(cli, 'TextualWorkflowOutput', StubOutput)
-    monkeypatch.setattr(cli.httpx, 'post', fake_post)
-    monkeypatch.setattr(cli.httpx, 'get', lambda url: FakeResponse({'status': 'failed'}))
-    return posted
+    return client
 
 
 def test_main_sends_the_run_parameters_to_the_backend(argv, stub_frontend, tmp_path):
@@ -243,8 +301,8 @@ def test_main_sends_the_run_parameters_to_the_backend(argv, stub_frontend, tmp_p
 
     cli.main()
 
-    url, payload = stub_frontend[0]
-    assert url.endswith('/workflow')
+    url, payload = stub_frontend.posted[0]
+    assert url == '/workflow'
     assert payload['workflow_file'] == os.path.abspath('workflow.yml')
     assert payload['check_mode'] is True
     assert payload['start_from_node'] == 'n2'
@@ -261,7 +319,7 @@ def test_main_names_the_log_directory_after_the_workflow_and_time(argv, stub_fro
 
     cli.main()
 
-    log_dir = stub_frontend[0][1]['log_dir']
+    log_dir = stub_frontend.posted[0][1]['log_dir']
     assert log_dir.startswith(str(tmp_path) + '/basic.yml_')
     assert len(log_dir.rsplit('_', 2)[-1]) == 6   # HHMMSS
 
@@ -272,24 +330,40 @@ def test_main_uses_the_textual_frontend_in_visual_mode(argv, stub_frontend, tmp_
     cli.main()
 
     assert len(StubOutput.instances) == 1
-    assert StubOutput.instances[0].kwargs['backend_url'] == cli.BACKEND_URL
+    assert StubOutput.instances[0].kwargs['socket_path'] == ipc.DEFAULT_SOCKET_PATH
 
 
-def test_main_exits_when_the_user_declines_to_attach(argv, monkeypatch, stub_frontend, tmp_path):
+def test_the_session_socket_can_be_chosen_on_the_command_line(argv, stub_frontend, tmp_path):
+    argv('workflow.yml', '--log-dir', str(tmp_path), '--log-dir-no-info',
+         '--socket', str(tmp_path / 's.sock'))
+
+    cli.main()
+
+    assert StubOutput.instances[0].kwargs['socket_path'] == str(tmp_path / 's.sock')
+
+
+def test_an_unusable_socket_path_stops_the_cli(argv, stub_frontend, tmp_path):
+    argv('workflow.yml', '--log-dir', str(tmp_path), '--log-dir-no-info',
+         '--socket', '/tmp/' + 'x' * 200 + '.sock')
+
+    with pytest.raises(SystemExit) as exit_info:
+        cli.main()
+
+    assert exit_info.value.code == 1
+
+
+def test_main_exits_when_the_user_declines_to_attach(argv, stub_frontend, tmp_path):
     conflict = httpx.HTTPStatusError(
         'conflict',
-        request=httpx.Request('POST', cli.BACKEND_URL + '/workflow'),
+        request=httpx.Request('POST', ipc.BASE_URL + '/workflow'),
         response=httpx.Response(
             409,
             json={'detail': {'message': 'A different workflow is already running',
                              'running_workflow_file': '/tmp/other.yml'}},
-            request=httpx.Request('POST', cli.BACKEND_URL + '/workflow')),
+            request=httpx.Request('POST', ipc.BASE_URL + '/workflow')),
     )
 
-    def refuse(url, json=None, timeout=None):
-        raise conflict
-
-    monkeypatch.setattr(cli.httpx, 'post', refuse)
+    stub_frontend.post_error = conflict
     StubConsole.answer = 'n'
     argv('workflow.yml', '--log-dir', str(tmp_path), '--log-dir-no-info')
 

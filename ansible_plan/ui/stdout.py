@@ -16,8 +16,8 @@ from ..core.models import NodeStatus
 class StdoutWorkflowOutput(WorkflowOutput):
     _log_name = 'console.log'
 
-    def __init__(self, backend_url, event, logging_dir, log_level, cmd_args):
-        super().__init__(backend_url, event, logging_dir, log_level, cmd_args)
+    def __init__(self, socket_path, event, logging_dir, log_level, cmd_args):
+        super().__init__(socket_path, event, logging_dir, log_level, cmd_args)
         self._refresh_interval = 2
         self.__console = Console()
         self.__interactive_retry = cmd_args.interactive_retry

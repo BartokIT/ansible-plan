@@ -31,12 +31,11 @@ import httpx
 import subprocess
 import time
 
+from . import ipc
 from .ui.stdout import StdoutWorkflowOutput
 from .ui.textual import TextualWorkflowOutput
 from ansible.cli.arguments import option_helpers as opt_help
 from ansible.parsing.splitter import parse_kv
-
-BACKEND_URL = "http://127.0.0.1:8001"
 
 def define_logger(logging_dir, level):
     logger_file_path = os.path.join(logging_dir, 'main.log')
@@ -57,40 +56,52 @@ def define_logger(logging_dir, level):
     return logger
 
 
-def check_and_start_backend(logger, logging_dir):
+def check_and_start_backend(logger, logging_dir, socket_path, client):
+    """
+    Attach to the session already listening on the socket, or start one.
+
+    A session is shared: when a backend is already there this returns without
+    starting anything and every front end drives the same workflow.
+    """
     try:
-        httpx.get(f"{BACKEND_URL}/health")
+        client.get("/health")
         logger.info("Backend is already running.")
+        return None
     except httpx.ConnectError:
         logger.info("Backend not running. Starting it now.")
-        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
-        popen_kwargs = {
-            "cwd": project_root,
-            "stdout": open(os.path.join(logging_dir, "backend_stdout.log"), "wb"),
-            "stderr": open(os.path.join(logging_dir, "backend_stderr.log"), "wb"),
-        }
+    ipc.ensure_socket_dir(socket_path, group=os.environ.get(ipc.GROUP_ENV_VAR))
+    if ipc.remove_stale_socket(socket_path):
+        logger.info("Removed the socket left behind by a backend that died.")
 
-        if os.name == 'nt':
-            popen_kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
-        elif os.name == 'posix':
-            popen_kwargs['start_new_session'] = True
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 
-        process = subprocess.Popen(
-            [sys.executable, "-m", "ansible_plan.service", "--log-dir", logging_dir],
-            **popen_kwargs
-        )
+    popen_kwargs = {
+        "cwd": project_root,
+        "stdout": open(os.path.join(logging_dir, "backend_stdout.log"), "wb"),
+        "stderr": open(os.path.join(logging_dir, "backend_stderr.log"), "wb"),
+    }
 
-        for _ in range(10):
-            try:
-                httpx.get(f"{BACKEND_URL}/health")
-                logger.info("Backend started successfully.")
-                return process
-            except httpx.ConnectError:
-                time.sleep(1)
-        logger.error("Failed to start the backend.")
-        sys.exit(1)
-    return None
+    if os.name == 'nt':
+        popen_kwargs['creationflags'] = subprocess.CREATE_NEW_PROCESS_GROUP
+    elif os.name == 'posix':
+        popen_kwargs['start_new_session'] = True
+
+    process = subprocess.Popen(
+        [sys.executable, "-m", "ansible_plan.service",
+         "--log-dir", logging_dir, "--socket", socket_path],
+        **popen_kwargs
+    )
+
+    for _ in range(10):
+        try:
+            client.get("/health")
+            logger.info("Backend started successfully.")
+            return process
+        except httpx.ConnectError:
+            time.sleep(1)
+    logger.error("Failed to start the backend.")
+    sys.exit(1)
 
 
 def read_options():
@@ -156,6 +167,9 @@ def read_options():
     parser.add_argument('-it', '--input-templating', dest='input_templating', default=[], action='append', type=keyvalue,
                         help='Input variable for the templating -it key1=value1 -it key2=value2')
 
+    parser.add_argument('--socket', dest='socket', default=None,
+                        help='unix socket of the session to join. defaults to %s' % ipc.DEFAULT_SOCKET_PATH)
+
     return parser.parse_args()
 
 def keyvalue(value):
@@ -174,7 +188,20 @@ def main():
     logger = define_logger(logging_dir, cmd_args.log_level)
     console = Console()
 
-    check_and_start_backend(logger, logging_dir)
+    try:
+        socket_path = ipc.socket_path(cmd_args.socket)
+    except ipc.SocketError as err:
+        print(str(err), file=sys.stderr)
+        sys.exit(1)
+
+    client = ipc.build_client(socket_path)
+
+    try:
+        check_and_start_backend(logger, logging_dir, socket_path, client)
+    except ipc.SocketError as err:
+        logger.error(str(err))
+        print(str(err), file=sys.stderr)
+        sys.exit(1)
 
     extra_vars = {}
     for single_extra_vars in cmd_args.extra_vars:
@@ -199,7 +226,7 @@ def main():
     }
 
     try:
-        response = httpx.post(f"{BACKEND_URL}/workflow", json=start_payload, timeout=30)
+        response = client.post("/workflow", json=start_payload, timeout=30)
         response.raise_for_status()
         response_data = response.json()
         if response_data.get("status") == "reconnected":
@@ -236,7 +263,7 @@ def main():
 
     if cmd_args.mode == 'visual':
         output = TextualWorkflowOutput(
-            backend_url=BACKEND_URL,
+            socket_path=socket_path,
             event=threading.Event(),
             logging_dir=logging_dir,
             log_level=cmd_args.log_level,
@@ -245,7 +272,7 @@ def main():
         output.run()
 
         try:
-            response = httpx.get(f"{BACKEND_URL}/workflow")
+            response = client.get("/workflow")
             response.raise_for_status()
             status = response.json().get("status")
             if status == "running":
@@ -255,7 +282,7 @@ def main():
             pass
     else:
         stdout_thread = StdoutWorkflowOutput(
-            backend_url=BACKEND_URL,
+            socket_path=socket_path,
             event=threading.Event(),
             logging_dir=logging_dir,
             log_level=cmd_args.log_level,
@@ -276,12 +303,12 @@ def main():
 
     # Shutdown logic
     try:
-        response = httpx.get(f"{BACKEND_URL}/workflow")
+        response = client.get("/workflow")
         response.raise_for_status()
         status = response.json().get("status")
         if status != "running":
             logger.info("Workflow finished. Shutting down backend.")
-            httpx.post(f"{BACKEND_URL}/shutdown")
+            client.post("/shutdown")
     except (httpx.ConnectError, httpx.HTTPStatusError) as e:
         logger.warning(f"Could not get workflow status or shutdown backend: {e}")
 
