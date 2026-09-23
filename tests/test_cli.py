@@ -203,7 +203,7 @@ def test_a_missing_backend_is_spawned_detached(monkeypatch, tmp_path, session_so
     monkeypatch.setattr(cli.subprocess, 'Popen', fake_popen)
 
     cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path),
-                               session_socket, StubClient(failures=1))
+                                session_socket, StubClient(failures=1))
 
     assert calls['command'] == [sys.executable, '-m', 'ansible_plan.service',
                                 '--log-dir', str(tmp_path), '--socket', session_socket]
@@ -222,7 +222,7 @@ def test_a_socket_left_by_a_dead_backend_is_removed(monkeypatch, tmp_path, sessi
     monkeypatch.setattr(cli.subprocess, 'Popen', lambda *a, **k: 'the-process')
 
     cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path),
-                               session_socket, StubClient(failures=1))
+                                session_socket, StubClient(failures=1))
 
     assert not os.path.exists(session_socket)
 
@@ -232,7 +232,7 @@ def test_the_socket_directory_is_created_when_missing(monkeypatch, tmp_path):
     monkeypatch.setattr(cli.subprocess, 'Popen', lambda *a, **k: 'the-process')
 
     cli.check_and_start_backend(cli.logging.getLogger('main'), str(tmp_path),
-                               session_socket, StubClient(failures=1))
+                                session_socket, StubClient(failures=1))
 
     assert os.path.isdir(str(tmp_path / 'run'))
 

@@ -61,7 +61,6 @@ class StdoutWorkflowOutput(WorkflowOutput):
         table.add_column("Ended", style="green")
         table.add_column("Status")
 
-
         if nodes:
             for node in nodes:
                 node_type = node.get('type')
@@ -87,7 +86,6 @@ class StdoutWorkflowOutput(WorkflowOutput):
                     )
         self.__console.print(table)
         self.__console.print("")
-
 
         if nodes and self.__interactive_retry:
             for node in nodes:
@@ -124,7 +122,6 @@ class StdoutWorkflowOutput(WorkflowOutput):
         status_data = self.api_client.get_workflow_status()
         if status_data.get('status') == 'failed' and not found_failed_node_to_prompt:
             self.user_chose_to_quit = True
-
 
     def draw_pause(self):
         ''' Non blocking thread wait'''
@@ -194,13 +191,13 @@ class StdoutWorkflowOutput(WorkflowOutput):
     def handle_doubtful_node(self, node):
         y_or_n = ''
         self.__console.line()
-        self.__console.rule("node \[[italic]" + node['id'] +"[/italic]] awaiting confirmation")
+        self.__console.rule("node \\[[italic]" + node['id'] + "[/italic]] awaiting confirmation")
         table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
-        table.add_column(width=(self.__first_column_width+1), justify="right")
+        table.add_column(width=(self.__first_column_width + 1), justify="right")
         table.add_column()
-        table.add_row('[bright_magenta]Node[/]',f"[cyan]{node['id']}[/]")
-        table.add_row('[bright_magenta]Reference[/]',node.get('reference', '-'))
-        table.add_row('[bright_magenta]Description[/]',node.get('description', '-'))
+        table.add_row('[bright_magenta]Node[/]', f"[cyan]{node['id']}[/]")
+        table.add_row('[bright_magenta]Reference[/]', node.get('reference', '-'))
+        table.add_row('[bright_magenta]Description[/]', node.get('description', '-'))
         self.__console.print(table)
 
         while y_or_n.lower() not in ['y', 'n']:
@@ -210,10 +207,10 @@ class StdoutWorkflowOutput(WorkflowOutput):
             table.add_column()
             self.__console.print(table)
             self.__console.line()
-            y_or_n = Prompt.ask("[white] Do you want to run the node \[{}]? [green]y[/](yes) / [bright_red]n[/](no=skip)".format(node['id']),
+            y_or_n = Prompt.ask("[white] Do you want to run the node \\[{}]? [green]y[/](yes) / [bright_red]n[/](no=skip)".format(node['id']),
                                 console=self.__console,
                                 show_choices=False,
-                                choices=["n","y"])
+                                choices=["n", "y"])
 
         self.__console.line()
         self.__console.rule()
@@ -241,7 +238,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
             y_or_n = Prompt.ask("[white]Do you want to continue? [green]y[/](yes) / [bright_red]n[/](no)",
                                 console=self.__console,
                                 show_choices=False,
-                                choices=["n","y"])
+                                choices=["n", "y"])
 
         self.__console.line()
         self.__console.rule()
@@ -259,10 +256,10 @@ class StdoutWorkflowOutput(WorkflowOutput):
         timestamp = node.get('ended', '')
 
         if not timestamp:
-             timestamp = datetime.now().strftime('%H:%M:%S')
+            timestamp = datetime.now().strftime('%H:%M:%S')
 
         table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
-        table.add_column(width=(self.__first_column_width +1), justify="right")
+        table.add_column(width=(self.__first_column_width + 1), justify="right")
         table.add_column()
 
         message = ""
@@ -278,14 +275,14 @@ class StdoutWorkflowOutput(WorkflowOutput):
     def handle_retry(self, node):
         y_or_n = ''
         self.__console.line()
-        self.__console.rule("node \[[italic]" + node['id'] +"[/italic]] failed")
+        self.__console.rule("node \\[[italic]" + node['id'] + "[/italic]] failed")
         table = Table(show_header=False, show_footer=False, show_lines=False, show_edge=False)
-        #table.add_column()
-        table.add_column(width=(self.__first_column_width+1), justify="right")
+        # table.add_column()
+        table.add_column(width=(self.__first_column_width + 1), justify="right")
         table.add_column()
-        table.add_row('[bright_magenta]Node[/]',f"[cyan]{node['id']}[/]")
-        table.add_row('[bright_magenta]Reference[/]',node.get('reference', '-'))
-        table.add_row('[bright_magenta]Description[/]',node.get('description', '-'))
+        table.add_row('[bright_magenta]Node[/]', f"[cyan]{node['id']}[/]")
+        table.add_row('[bright_magenta]Reference[/]', node.get('reference', '-'))
+        table.add_row('[bright_magenta]Description[/]', node.get('description', '-'))
         self.__console.print(table)
 
         while y_or_n.lower() not in ['y', 'n', 's', 'l']:
@@ -295,10 +292,11 @@ class StdoutWorkflowOutput(WorkflowOutput):
             table.add_column()
             self.__console.print(table)
             self.__console.line()
-            y_or_n = Prompt.ask("[white] Do you want to restart the node \[{}]? [green]y[/](yes) / [bright_red]n[/](no) / [cyan]s[/](skip) / [bright_magenta]l[/](logs)".format(node['id']),
+            y_or_n = Prompt.ask(("[white] Do you want to restart the node \\[{}]? [green]y[/](yes) / [bright_red]n[/](no) / "
+                                 "[cyan]s[/](skip) / [bright_magenta]l[/](logs)").format(node['id']),
                                 console=self.__console,
                                 show_choices=False,
-                                choices=["n","y","s","l"])
+                                choices=["n", "y", "s", "l"])
 
             if y_or_n == 'l':
                 stdout = self.api_client.get_node_stdout(node['id'])
@@ -353,7 +351,7 @@ class StdoutWorkflowOutput(WorkflowOutput):
             while not self.event.is_set():
                 if is_tty and select.select([sys.stdin], [], [], 0) == ([sys.stdin], [], []):
                     c = sys.stdin.read(1)
-                    if c == '\x18': # Ctrl+X
+                    if c == '\x18':  # Ctrl+X
                         self._request_stop()
 
                 if self.stop_requested:
@@ -378,7 +376,6 @@ class StdoutWorkflowOutput(WorkflowOutput):
         finally:
             if is_tty:
                 termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
-
 
         if not self.event.is_set():
             self._logger.info(f"Final status: {status}. Exiting loop.")

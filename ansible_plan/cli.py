@@ -37,6 +37,7 @@ from .ui.textual import TextualWorkflowOutput
 from ansible.cli.arguments import option_helpers as opt_help
 from ansible.parsing.splitter import parse_kv
 
+
 def define_logger(logging_dir, level):
     logger_file_path = os.path.join(logging_dir, 'main.log')
     if not os.path.exists(os.path.dirname(logger_file_path)):
@@ -112,10 +113,10 @@ def read_options():
     group = parser.add_mutually_exclusive_group()
 
     group.add_argument('--execute-nodes', dest='filter_nodes', default="",
-                        help='filter nodes to be executed inside a workflow, executing only the selected (comma separated).')
+                       help='filter nodes to be executed inside a workflow, executing only the selected (comma separated).')
 
     group.add_argument('--skip-nodes', dest='skip_nodes', default="",
-                        help='Filter nodes to be executed inside a workflow, skipping the selected (comma separated)')
+                       help='Filter nodes to be executed inside a workflow, skipping the selected (comma separated)')
 
     parser.add_argument('-sn', '--start-from-node', dest='start_from_node', default="",
                         help='Start the execution of the workflow from the specified node')
@@ -172,10 +173,12 @@ def read_options():
 
     return parser.parse_args()
 
+
 def keyvalue(value):
     if '=' not in value:
         raise Exception('Key value malformatted: key=value, missing the "="')
     return value.split('=')
+
 
 def main():
     os.environ['TERM'] = 'xterm-256color'
@@ -259,7 +262,6 @@ def main():
         logger.error(f"Failed to start workflow: {e}")
         print(f"Failed to start workflow: {e}", file=sys.stderr)
         sys.exit(1)
-
 
     if cmd_args.mode == 'visual':
         output = TextualWorkflowOutput(

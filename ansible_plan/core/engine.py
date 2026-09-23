@@ -192,13 +192,13 @@ class AnsibleWorkflow():
         node = self.get_node_object(node_id)
         node.run()
         self._logger.info("Node: %s - %s - [ %s - ... ]" % (node, 'starting',
-                            node.get_telemetry()["started"]))
+                                                            node.get_telemetry()["started"]))
         self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.RUNNING, node)
 
     def skip_node(self, node_id):
         node = self.get_node_object(node_id)
         self._logger.info("Node: %s - %s - [ %s - ... ]" % (node, 'skipped',
-                            node.get_telemetry()["started"]))
+                                                            node.get_telemetry()["started"]))
         self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.SKIPPED, node)
 
     def add_running_node(self, node_id):
@@ -307,7 +307,6 @@ class AnsibleWorkflow():
                                     NodeStatus.AWAITING_CONFIRMATION,
                                     next_node
                                 )
-
 
             elif status == NodeStatus.AWAITING_CONFIRMATION:
                 self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.AWAITING_CONFIRMATION, node)
@@ -430,8 +429,6 @@ class AnsibleWorkflow():
             self.notify_event(WorkflowEventType.NODE_EVENT, NodeStatus.SKIPPED, node)
             self.add_running_node(node_id)
 
-
-
     def run(self, start_node: str = "_s", end_node: str = "_e", verify_only: bool = False):
         '''
         Run the workflows starting from a graph node until reaching the end node.
@@ -504,7 +501,7 @@ class AnsibleWorkflow():
                     if self.__running_status != WorkflowStatus.PAUSED:
                         self.__running_status = WorkflowStatus.PAUSED
                         self.notify_event(WorkflowEventType.WORKFLOW_EVENT, self.__running_status, 'Workflow paused, waiting for confirmation.')
-                    time.sleep(0.5) # Prevent busy-waiting
+                    time.sleep(0.5)  # Prevent busy-waiting
                     continue
 
                 if self.get_some_failed_task():

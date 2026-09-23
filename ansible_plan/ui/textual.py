@@ -13,7 +13,7 @@ from rich.pretty import Pretty
 from textual.app import App, ComposeResult
 from textual.widgets import Header, Footer, Static, Tree, RichLog, DataTable, Button, Label
 from textual.containers import Horizontal, Vertical, Container
-from textual.screen import Screen, ModalScreen
+from textual.screen import ModalScreen
 from textual import work
 from textual.reactive import reactive
 from textual.theme import BUILTIN_THEMES
@@ -90,7 +90,7 @@ class StopWorkflowScreen(ModalScreen):
 class DoubtfulNodeScreen(ModalScreen):
     """Screen with a dialog to approve or skip a node."""
 
-    def __init__(self, node_id: str, message: str, disapprove_label:str, **kwargs):
+    def __init__(self, node_id: str, message: str, disapprove_label: str, **kwargs):
         super().__init__(**kwargs)
         self.node_id = node_id
         self.message = message
@@ -118,6 +118,7 @@ class NullHighlighter(Highlighter):
     def highlight(self, text):
         pass
 
+
 class TextualWorkflowOutput(WorkflowOutput):
     _log_name = 'textual.log'
 
@@ -137,11 +138,17 @@ class TextualWorkflowOutput(WorkflowOutput):
         self.app.run()
 
     # The following methods are not used in Textual mode as the app handles the loop.
-    def draw_init(self): pass
-    def draw_end(self, status_data: dict = None): pass
-    def draw_step(self): pass
-    def draw_pause(self): pass
+    def draw_init(self):
+        pass
 
+    def draw_end(self, status_data: dict = None):
+        pass
+
+    def draw_step(self):
+        pass
+
+    def draw_pause(self):
+        pass
 
     class WorkflowApp(App):
         CSS_PATH = "style.css"
@@ -158,7 +165,7 @@ class TextualWorkflowOutput(WorkflowOutput):
             self.outer_instance = outer_instance
             self.workflow_filename = os.path.basename(cmd_args.workflow)
             if self.outer_instance.is_verify_only():
-                self.title = f"Workflow Viewer (Verify Only)"
+                self.title = "Workflow Viewer (Verify Only)"
             else:
                 self.title = "Workflow Viewer"
 
@@ -288,7 +295,7 @@ class TextualWorkflowOutput(WorkflowOutput):
         def _set_widget_display(self, widget, display):
             widget.display = display
 
-        def _push_doubtful_node_screen(self, node_id: str, message: str,disapprove_label:str):
+        def _push_doubtful_node_screen(self, node_id: str, message: str, disapprove_label: str):
             self.push_screen(
                 DoubtfulNodeScreen(node_id, message, disapprove_label),
                 lambda result: self.check_doubtful_node(result, node_id)

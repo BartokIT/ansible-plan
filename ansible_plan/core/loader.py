@@ -8,7 +8,6 @@ import string
 import typing
 import jinja2
 import copy
-import sys
 import yaml
 import jsonschema
 from ansible.plugins.filter.core import FilterModule
@@ -21,6 +20,7 @@ from .models import Node, PNode, BNode, INode, CNode
 from .validation import validate_workflow
 from collections.abc import Mapping
 from enum import Enum
+
 
 class WorkflowLoader(metaclass=abc.ABCMeta):
     '''
@@ -44,8 +44,9 @@ class WorkflowYamlLoader(WorkflowLoader):
     Handles loading of a workflow from a yml file with directives that mimics
     Ansible task names.
     '''
+
     def __init__(self, workflow_file: str, logging_dir: str,
-                 logging_level: str = 'error', input_templating: dict={},
+                 logging_level: str = 'error', input_templating: dict = {},
                  check_mode=False, verbosity=0, doubtful_mode=False):
         '''
         Initialize the loader
@@ -205,7 +206,6 @@ class WorkflowYamlLoader(WorkflowLoader):
 
         options: dict = dict()
         defaults: dict = dict()
-        workflow: dict = dict()
         template_variables: dict = dict()
 
         # get values from options and default keys of the file
@@ -224,7 +224,6 @@ class WorkflowYamlLoader(WorkflowLoader):
                 options['global_path'] = os.path.join(workflow_dir, options['global_path'])
         else:
             options["global_path"] = workflow_dir
-
 
         template_variables = {
             **self.input_templating,
@@ -269,7 +268,7 @@ class WorkflowYamlLoader(WorkflowLoader):
         self.__yaml_parsed['workflow'].append(dict(id='_e', block=[]))
 
         # add a dummy root node to visualize the workflow like a tree in console
-        self.__workflow.add_node(BNode("_root"),{'child': {'strategy': 'serial'}})
+        self.__workflow.add_node(BNode("_root"), {'child': {'strategy': 'serial'}})
         self.__workflow.get_original_graph().add_node('_root')
 
         # perform static inclusion where include_block is found
@@ -277,7 +276,7 @@ class WorkflowYamlLoader(WorkflowLoader):
 
         # perform templating of strings
         # self._perform_template_rendering(self.__yaml_parsed['workflow'], template_variables)
-        #self._perform_template_rendering(self.__yaml_parsed, template_variables)
+        # self._perform_template_rendering(self.__yaml_parsed, template_variables)
         self._write_yaml(self.__yaml_parsed, os.path.join(self._logging_dir, 'rendered_workflow.yml'))
 
         # validate twice after the file inclusion
@@ -320,13 +319,14 @@ class WorkflowYamlLoader(WorkflowLoader):
             i = 0
             for value in parsed_yml:
                 if isinstance(value, str):
-                    parsed_yml[i] =  self._perform_string_template_rendering(value, template_variables)
+                    parsed_yml[i] = self._perform_string_template_rendering(value, template_variables)
                     self._logger.debug("Templating: %s" % parsed_yml[i])
                 elif isinstance(value, dict) or isinstance(value, list):
                     self._perform_template_rendering(value, template_variables)
                 i = i + 1
 
-    def _perform_static_inclusion(self, parsed_yml: typing.List[dict], options: typing.Dict[str, str], prefix='', template_variables: typing.Dict[str, typing.Any]={}):
+    def _perform_static_inclusion(self, parsed_yml: typing.List[dict], options: typing.Dict[str, str], prefix='',
+                                  template_variables: typing.Dict[str, typing.Any] = {}):
         '''
         Perform inclusion of file containig block specifications
         Args:
@@ -369,7 +369,8 @@ class WorkflowYamlLoader(WorkflowLoader):
                     current_template_variables.update(inode['templating'])
 
                 if inode_templating:
-                    self._logger.info("Overwrited imported block templating (%s) with the importing node templating (%s)" % (inode['templating'], inode_templating))
+                    self._logger.info("Overwrited imported block templating (%s) with the importing node templating (%s)"
+                                      % (inode['templating'], inode_templating))
                     inode["templating"] = inode_templating
                     current_template_variables.update(inode['templating'])
                     self._logger.debug("Resulting template variables: %s" % current_template_variables)
@@ -486,16 +487,16 @@ class WorkflowYamlLoader(WorkflowLoader):
                     gnode = PNode(**pnode_parameters)
                     gnode.set_logger(self._logger)
                     self._logger.debug("---- %s added node: %s, level: %s, block type: %s, block id: %s" %
-                                    (indentation, pnode_parameters, level, strategy, block_id))
+                                       (indentation, pnode_parameters, level, strategy, block_id))
                 elif inode.get('checkpoint', False):
                     gnode = CNode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
-                else: # It's a info node
+                else:  # It's a info node
                     gnode = INode(gnode_id, description=inode.get('description', ''), reference=inode.get('reference', ''))
 
             # the node specification is added
-            node_info=dict(level=level, block=dict(strategy=strategy, block_id=block_id))
+            node_info = dict(level=level, block=dict(strategy=strategy, block_id=block_id))
             if 'block' in inode:
-                node_info['child']={'strategy':inode.get('strategy', 'parallel')}
+                node_info['child'] = {'strategy': inode.get('strategy', 'parallel')}
 
             self.__workflow.add_node(gnode, node_info)
 
@@ -505,7 +506,7 @@ class WorkflowYamlLoader(WorkflowLoader):
 
             if 'block' in inode:
                 zero_outdegree_nodes.extend(block_sub_nodes)
-            else: # This covers both playbook and dummy nodes
+            else:  # This covers both playbook and dummy nodes
                 if strategy == 'parallel' or (strategy == 'serial' and inode == to_be_imported[-1]):
                     zero_outdegree_nodes.append(gnode)
 

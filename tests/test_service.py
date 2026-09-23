@@ -249,7 +249,7 @@ def test_node_endpoints_need_a_workflow(client, path):
 
 @pytest.mark.parametrize('action', ['restart', 'skip', 'approve', 'disapprove'])
 def test_node_actions_are_ignored_when_the_node_is_not_in_that_state(start, client,
-                                                                    fake_runner, action):
+                                                                     fake_runner, action):
     start(verify_only=True)
 
     response = client.post('/workflow/node/s1/%s' % action)

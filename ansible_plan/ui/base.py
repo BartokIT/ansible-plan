@@ -6,10 +6,12 @@ import abc
 from .api_client import ApiClient
 from ..core.models import WorkflowStatus
 
+
 class WorkflowOutput(threading.Thread):
     '''
     A general workflow output class to be implemented by subclasses
     '''
+
     def __init__(self, socket_path, event, logging_dir, log_level, cmd_args):
         threading.Thread.__init__(self)
         self._define_logger(logging_dir, log_level)

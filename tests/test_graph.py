@@ -4,7 +4,6 @@ run, and the authoring hierarchy the UIs render as a tree.
 
 The topologies asserted here are the ones drawn in the README.
 '''
-import pytest
 
 from ansible_plan.core.models import NodeStatus
 
