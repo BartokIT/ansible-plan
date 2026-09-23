@@ -17,3 +17,4 @@ httpx
 python-multipart
 networkx
 pytest
+flake8

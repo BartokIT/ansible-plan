@@ -220,6 +220,8 @@ class TextualWorkflowOutput(WorkflowOutput):
 
         @work(thread=True)
         def update_status(self):
+            if self._shutdown_event.is_set():
+                return
             if self.api_client.check_health():
                 self.status_message = "[green]Backend: Connected[/green]"
 

@@ -67,7 +67,7 @@ def check_and_start_backend(logger, logging_dir, socket_path, client):
         client.get("/health")
         logger.info("Backend is already running.")
         return None
-    except httpx.ConnectError:
+    except httpx.TransportError:
         logger.info("Backend not running. Starting it now.")
 
     ipc.ensure_socket_dir(socket_path, group=os.environ.get(ipc.GROUP_ENV_VAR))
@@ -98,7 +98,7 @@ def check_and_start_backend(logger, logging_dir, socket_path, client):
             client.get("/health")
             logger.info("Backend started successfully.")
             return process
-        except httpx.ConnectError:
+        except httpx.TransportError:
             time.sleep(1)
     logger.error("Failed to start the backend.")
     sys.exit(1)
@@ -255,7 +255,7 @@ def main():
             if hasattr(e, 'response') and e.response:
                 print(e.response.text, file=sys.stderr)
             sys.exit(1)
-    except httpx.ConnectError as e:
+    except httpx.TransportError as e:
         logger.error(f"Failed to start workflow: {e}")
         print(f"Failed to start workflow: {e}", file=sys.stderr)
         sys.exit(1)
@@ -278,7 +278,7 @@ def main():
             if status == "running":
                 console.print("\nDetaching from workflow. The backend will continue to run.")
                 console.print("To re-attach, run the same command again.")
-        except (httpx.ConnectError, httpx.HTTPStatusError):
+        except (httpx.TransportError, httpx.HTTPStatusError):
             pass
     else:
         stdout_thread = StdoutWorkflowOutput(
@@ -309,7 +309,7 @@ def main():
         if status != "running":
             logger.info("Workflow finished. Shutting down backend.")
             client.post("/shutdown")
-    except (httpx.ConnectError, httpx.HTTPStatusError) as e:
+    except (httpx.TransportError, httpx.HTTPStatusError) as e:
         logger.warning(f"Could not get workflow status or shutdown backend: {e}")
 
 
