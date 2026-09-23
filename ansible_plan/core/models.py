@@ -122,7 +122,8 @@ class BNode(Node):
 
 
 class PNode(Node):
-    def __init__(self, id, playbook, inventory, artifact_dir, limit=None, project_path=None, extra_vars={}, vault_ids=[], check_mode=False, diff_mode=True, verbosity=1, description='', reference=''):
+    def __init__(self, id, playbook, inventory, artifact_dir, limit=None, project_path=None, extra_vars={}, vault_ids=[],
+                 check_mode=False, diff_mode=True, verbosity=1, description='', reference=''):
         super(PNode, self).__init__(id, description, reference)
         self.__playbook = playbook
         self.__inventory = inventory
@@ -261,7 +262,7 @@ class PNode(Node):
         # modify identification in case of multiple start
         ident = self.get_id()
         if os.path.exists(os.path.join(self.__artifact_dir, "%s" % self.get_id())):
-            i=1
+            i = 1
             ident = "%s_%s" % (self.get_id(), i)
             while os.path.exists(os.path.join(self.__artifact_dir, "%s_%s" % (self.get_id(), i))):
                 i = i + 1

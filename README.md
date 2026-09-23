@@ -22,6 +22,40 @@ To only check the syntax of the workflow file, you can just add the parameter `-
 ### Check mode
 To launch all the playbooks inside the workflow in check mode, it is possible to specify the `--check` option.
 
+### Shared session
+The playbooks are not run by the command itself but by a backend process that the
+first invocation starts in background. The backend listens on a **unix socket**,
+`/run/ansible-plan/ansible-plan.sock` by default, so a session is reachable only
+from the machine it runs on and never from the network.
+
+A session is shared. Every user allowed to reach the socket joins the same live
+workflow: they see its progress, and they can stop it, retry a failed node or
+answer a checkpoint. Access is decided by the directory holding the socket, which
+`ansible-plan` creates as `rwxrws---`, so membership of the group owning that
+directory is what grants a user access to the session.
+
+To share a session within a team, create the directory once and give it to the
+team group:
+
+```bash
+sudo install -d -m 2770 -g ansible-operators /run/ansible-plan
+```
+
+An existing directory is never modified by `ansible-plan`, so the permissions you
+set are the ones that count. When the directory does not exist yet, the group can
+also be chosen with the `ANSIBLE_PLAN_SOCKET_GROUP` environment variable.
+
+| Parameter          | Description                                                                                 |
+| :---               | :---                                                                                        |
+| --socket SOCKET    | Unix socket of the session to join. Defaults to `/run/ansible-plan/ansible-plan.sock`       |
+
+The socket location can also be set with the `ANSIBLE_PLAN_SOCKET` environment
+variable, which is useful where `/run` is not writable. Note that a unix socket
+path cannot exceed 107 bytes.
+
+To detach from a running workflow press `Ctrl+C`: the backend keeps going and the
+same command re-attaches to it, from any account that can reach the socket.
+
 ### Logging
 Various options can be used to increase the logging capacity. Here the possible options.
 

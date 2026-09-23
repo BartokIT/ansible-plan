@@ -1,9 +1,9 @@
 import graphviz
-import os
 import logging
 from .models import PNode, CNode, INode, BNode
 
 logger = logging.getLogger(__name__)
+
 
 def generate_workflow_svg(workflow, output_path_prefix):
     '''
@@ -32,18 +32,18 @@ def generate_workflow_svg(workflow, output_path_prefix):
                 label = label[:37] + "..."
 
             if node_id == '_s':
-                fillcolor = "#c8e6c9" # Pastel Green
+                fillcolor = "#c8e6c9"  # Pastel Green
             elif node_id == '_e':
-                fillcolor = "#ffcdd2" # Pastel Red
+                fillcolor = "#ffcdd2"  # Pastel Red
             else:
                 if isinstance(node_obj, BNode):
-                    fillcolor = "#eeeeee" # Light Gray
+                    fillcolor = "#eeeeee"  # Light Gray
                 elif isinstance(node_obj, PNode):
-                    fillcolor = "#e1f5fe" # Pastel Blue
+                    fillcolor = "#e1f5fe"  # Pastel Blue
                 elif isinstance(node_obj, CNode):
-                    fillcolor = "#ffe0b2" # Pastel Orange
+                    fillcolor = "#ffe0b2"  # Pastel Orange
                 elif isinstance(node_obj, INode):
-                    fillcolor = "#f3e5f5" # Pastel Purple
+                    fillcolor = "#f3e5f5"  # Pastel Purple
                 else:
                     fillcolor = '#ffffff'
 

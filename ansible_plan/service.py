@@ -3,35 +3,34 @@ import logging
 import os
 import json
 import signal
-import sys
 import threading
 import time
-from datetime import datetime
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, List
 
-uvicorn_log_config_file='/tmp/ansible_plan_service_log.json'
-class StopWorkflowRequest(BaseModel):
-    mode: str = "graceful"
-
+from . import ipc
 from .core.loader import WorkflowYamlLoader
 from .core.engine import AnsibleWorkflow
-from .core.models import NodeStatus, WorkflowStatus, PNode, INode, CNode
+from .core.models import WorkflowStatus, PNode, INode, CNode
 from .core.exceptions import (
     AnsibleWorkflowLoadingError,
     AnsibleWorkflowValidationError,
     AnsibleWorkflowVaultScript,
-    AnsibleWorkflowYAMLNotValid,
-    AnsibleWorkflowPlaybookNodeCheck,
 )
 import jinja2
+
+
+class StopWorkflowRequest(BaseModel):
+    mode: str = "graceful"
+
 
 app = FastAPI()
 
 # Global state
 workflow_lock = threading.Lock()
 current_workflow: Optional[AnsibleWorkflow] = None
+
 
 class WorkflowStartRequest(BaseModel):
     workflow_file: str
@@ -54,9 +53,9 @@ async def start_workflow(request: WorkflowStartRequest, background_tasks: Backgr
     global current_workflow
     with workflow_lock:
         if current_workflow and current_workflow.get_running_status() in [WorkflowStatus.RUNNING,
-                                                                           WorkflowStatus.PAUSED,
-                                                                           WorkflowStatus.ENDED,
-                                                                           WorkflowStatus.FAILED]:
+                                                                          WorkflowStatus.PAUSED,
+                                                                          WorkflowStatus.ENDED,
+                                                                          WorkflowStatus.FAILED]:
             if current_workflow.get_workflow_file() == request.workflow_file:
                 return {"status": "reconnected"}
             else:
@@ -162,12 +161,14 @@ def get_workflow_nodes():
             nodes_data.append(node_info)
         return nodes_data
 
+
 @app.get("/workflow/graph")
 def get_workflow_graph():
     with workflow_lock:
         if not current_workflow:
             raise HTTPException(status_code=404, detail="Workflow not found.")
         return {"edges": current_workflow.get_original_graph_edges()}
+
 
 @app.get("/workflow/node/{node_id}/stdout")
 def get_node_stdout(node_id: str):
@@ -279,8 +280,10 @@ def shutdown():
 def health_check():
     return {"status": "ok"}
 
+
 def define_logger(logging_dir, level):
-    common_format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    common_format = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    uvicorn_log_config_file = os.path.join(logging_dir, 'uvicorn_log_config.json')
     logger_file_path = os.path.join(logging_dir, 'service.log')
     if not os.path.exists(os.path.dirname(logger_file_path)):
         os.makedirs(os.path.dirname(logger_file_path))
@@ -294,14 +297,15 @@ def define_logger(logging_dir, level):
         format=common_format,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    conf_uvicorn=dict(version=1)
-    conf_uvicorn['handlers']=dict(default={'formatter':'default','class':'logging.FileHandler','filename': logger_file_path})
-    conf_uvicorn['loggers']={'uvicorn.access':{'level':'ERROR'}}
-    conf_uvicorn['formatters']={'default':{'format': common_format}}
-    conf_uvicorn['root']={'level': level.upper(),'handlers':['default'],'propgate':True}
+    conf_uvicorn = dict(version=1)
+    conf_uvicorn['handlers'] = dict(default={'formatter': 'default', 'class': 'logging.FileHandler', 'filename': logger_file_path})
+    conf_uvicorn['loggers'] = {'uvicorn.access': {'level': 'ERROR'}}
+    conf_uvicorn['formatters'] = {'default': {'format': common_format}}
+    conf_uvicorn['root'] = {'level': level.upper(), 'handlers': ['default'], 'propgate': True}
     with open(uvicorn_log_config_file, "w") as file:
-        json.dump(conf_uvicorn, file, indent=4) # Use indent for pretty formattin
-    return logger
+        json.dump(conf_uvicorn, file, indent=4)  # Use indent for pretty formattin
+    return uvicorn_log_config_file
+
 
 def read_options():
     parser = argparse.ArgumentParser(description='This is the server side of the Aansi mimics the AWX/Ansible Tower® workflows from command line.')
@@ -311,11 +315,37 @@ def read_options():
     parser.add_argument('--log-level', dest='log_level', default='info', choices=["debug", "info", "warning", "error", "critical"],
                         help='set the logging level. defaults to info')
 
+    parser.add_argument('--socket', dest='socket', default=None,
+                        help='unix socket to listen on. defaults to %s' % ipc.DEFAULT_SOCKET_PATH)
+
     return parser.parse_args()
 
 
-if __name__ == "__main__":
+def serve(socket_path, log_config):
+    '''
+    Listen on the session socket.
+
+    uvicorn opens a unix socket with mode 0666, so the socket is tightened as
+    soon as it is bound. The directory it sits in is the real access gate, but
+    a mode nobody outside the group can use is worth having anyway.
+    '''
     import uvicorn
+
+    class SessionServer(uvicorn.Server):
+        async def startup(self, sockets=None):
+            await super().startup(sockets=sockets)
+            os.chmod(socket_path, ipc.SOCKET_MODE)
+
+    config = uvicorn.Config(app, uds=socket_path, log_config=log_config)
+    SessionServer(config).run()
+
+
+if __name__ == "__main__":
     cmd_args = read_options()
-    define_logger(cmd_args.log_dir,cmd_args.log_level)
-    uvicorn.run(app, host="0.0.0.0", port=8001, log_config=uvicorn_log_config_file)
+    log_config = define_logger(cmd_args.log_dir, cmd_args.log_level)
+
+    socket_path = ipc.socket_path(cmd_args.socket)
+    ipc.ensure_socket_dir(socket_path, group=os.environ.get(ipc.GROUP_ENV_VAR))
+    ipc.remove_stale_socket(socket_path)
+
+    serve(socket_path, log_config)
