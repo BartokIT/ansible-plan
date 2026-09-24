@@ -580,8 +580,7 @@ workflow:
 # side files
 # --------------------------------------------------------------------------
 
-def test_wf_yml_beside_the_workflow_is_prepended(write_wf, load, workdir):
-    # get_contents() silently concatenates a _wf.yml living in the same folder
+def test_wf_yml_beside_the_workflow_is_its_base(write_wf, load, workdir):
     write_wf('defaults:\n  inventory: inventory.ini\n  limit: first_hostname\n',
              name='_wf.yml')
     workflow = 'workflow:\n  - id: n1\n    import_playbook: playbooks/a.yml\n'
@@ -589,6 +588,180 @@ def test_wf_yml_beside_the_workflow_is_prepended(write_wf, load, workdir):
 
     assert loaded.get_node_object('n1').get_inventory() == str(workdir / 'inventory.ini')
     assert loaded.get_node_object('n1')._PNode__limit == 'first_hostname'
+
+
+# --------------------------------------------------------------------------
+# workflow bases: _wf.yml and meta.extends
+# --------------------------------------------------------------------------
+
+ONE_NODE = '''workflow:
+  - id: n1
+    import_playbook: playbooks/a.yml
+'''
+
+
+def _limit(workflow):
+    return workflow.get_node_object('n1')._PNode__limit
+
+
+def test_a_base_is_merged_key_by_key(write_wf, load, workdir):
+    # both files declare defaults: the base still provides the inventory
+    write_wf('---\ndefaults:\n  inventory: inventory.ini\n  limit: from_base\n', name='_wf.yml')
+    loaded = load(write_wf('---\ndefaults:\n  limit: from_workflow\n' + ONE_NODE))
+
+    assert loaded.get_node_object('n1').get_inventory() == str(workdir / 'inventory.ini')
+    assert _limit(loaded) == 'from_workflow'
+
+
+def test_files_starting_with_a_document_marker_can_be_merged(write_wf, load):
+    # text concatenation turned these into two YAML documents
+    write_wf('---\ndefaults:\n  inventory: inventory.ini\n', name='_wf.yml')
+
+    assert set(load(write_wf('---\n' + ONE_NODE)).get_nodes()) == {'_root', '_s', 'n1', '_e'}
+
+
+def test_nested_mappings_are_merged_and_lists_replaced(write_wf, load):
+    write_wf('''---
+templating:
+  kept: from_base
+  replaced: from_base
+defaults:
+  inventory: inventory.ini
+  vars:
+    base_var: 1
+workflow:
+  - id: from_base
+    import_playbook: playbooks/b.yml
+''', name='_wf.yml')
+    loaded = load(write_wf('''---
+templating:
+  replaced: from_workflow
+defaults:
+  vars:
+    workflow_var: 2
+workflow:
+  - id: n1
+    import_playbook: playbooks/a.yml
+    limit: "{{ kept }} {{ replaced }}"
+'''))
+
+    node = loaded.get_node_object('n1')
+    assert _limit(loaded) == 'from_base from_workflow'
+    assert node.get_extravars() == {'base_var': 1, 'workflow_var': 2}
+    # the workflow list is replaced, not appended to
+    assert 'from_base' not in loaded.get_nodes()
+
+
+def test_a_base_can_provide_the_whole_workflow(write_wf, load):
+    write_wf('---\ndefaults:\n  inventory: inventory.ini\n' + ONE_NODE, name='_wf.yml')
+    loaded = load(write_wf('---\ndefaults:\n  limit: only_this\n'))
+
+    assert _limit(loaded) == 'only_this'
+
+
+def test_meta_extends_names_the_base_relative_to_the_declaring_file(write_wf, load, workdir):
+    write_wf('---\ndefaults:\n  inventory: inventory.ini\n  limit: shared\n', name='common/base.yml')
+    loaded = load(write_wf('---\nmeta:\n  extends: common/base.yml\n' + ONE_NODE))
+
+    assert _limit(loaded) == 'shared'
+
+
+def test_meta_extends_takes_the_place_of_the_implicit_base(write_wf, load):
+    write_wf('---\ndefaults:\n  inventory: inventory.ini\n  limit: implicit\n', name='_wf.yml')
+    write_wf('---\ndefaults:\n  inventory: inventory.ini\n  limit: explicit\n', name='explicit.yml')
+    loaded = load(write_wf('---\nmeta:\n  extends: explicit.yml\n' + ONE_NODE))
+
+    assert _limit(loaded) == 'explicit'
+
+
+def test_meta_extends_null_opts_out_of_the_implicit_base(write_wf, load):
+    write_wf('---\ndefaults:\n  limit: implicit\n', name='_wf.yml')
+    loaded = load(write_wf('---\nmeta:\n  extends: null\ndefaults:\n  inventory: inventory.ini\n' + ONE_NODE))
+
+    assert _limit(loaded) is None
+
+
+def test_bases_can_be_chained(write_wf, load):
+    write_wf('---\ndefaults:\n  inventory: inventory.ini\n  limit: root\ntemplating:\n  who: root\n',
+             name='common/root.yml')
+    # a base extends through meta.extends only: this _wf.yml is not applied
+    write_wf('---\ndefaults:\n  limit: not_applied\n', name='common/_wf.yml')
+    write_wf('---\nmeta:\n  extends: root.yml\ntemplating:\n  who: middle\n', name='common/middle.yml')
+    loaded = load(write_wf('''---
+meta:
+  extends: common/middle.yml
+workflow:
+  - id: n1
+    import_playbook: playbooks/a.yml
+    description: "{{ who }}"
+'''))
+
+    assert _limit(loaded) == 'root'
+    assert loaded.get_node_object('n1').get_description() == 'middle'
+
+
+@pytest.mark.parametrize('files', [
+    {'workflow.yml': 'workflow.yml'},
+    {'workflow.yml': 'a.yml', 'a.yml': 'b.yml', 'b.yml': 'a.yml'},
+])
+def test_a_workflow_extending_itself_is_rejected(write_wf, load, files):
+    paths = {name: write_wf('---\nmeta:\n  extends: %s\ndefaults:\n  inventory: inventory.ini\n%s' % (base, ONE_NODE),
+                            name=name)
+             for name, base in files.items()}
+
+    with pytest.raises(AnsibleWorkflowRecursiveImport):
+        load(paths['workflow.yml'])
+
+
+def test_a_missing_base_is_reported_with_its_path(write_wf, load):
+    with pytest.raises(AnsibleWorkflowYAMLNotValid, match='missing.yml'):
+        load(write_wf('---\nmeta:\n  extends: missing.yml\n' + ONE_NODE))
+
+
+def test_an_invalid_base_is_reported_with_its_path(write_wf, load):
+    write_wf('---\nunexpected: value\n', name='_wf.yml')
+
+    with pytest.raises(AnsibleWorkflowValidationError, match='_wf.yml'):
+        load(write_wf('---\ndefaults:\n  inventory: inventory.ini\n' + ONE_NODE))
+
+
+def test_a_base_that_is_not_a_mapping_is_rejected(write_wf, load):
+    write_wf('---\n- just\n- a list\n', name='_wf.yml')
+
+    with pytest.raises(AnsibleWorkflowValidationError, match='mapping'):
+        load(write_wf('---\ndefaults:\n  inventory: inventory.ini\n' + ONE_NODE))
+
+
+def test_broken_yaml_in_a_base_names_the_base(write_wf, load):
+    write_wf('---\ndefaults:\n  inventory: "\n', name='_wf.yml')
+
+    with pytest.raises(AnsibleWorkflowYAMLNotValid, match='_wf.yml'):
+        load(write_wf('---\n' + ONE_NODE))
+
+
+def test_a_workflow_named_wf_yml_does_not_extend_itself(write_wf, load):
+    loaded = load(write_wf('---\ndefaults:\n  inventory: inventory.ini\n' + ONE_NODE, name='_wf.yml'))
+
+    assert 'n1' in loaded.get_nodes()
+
+
+def test_included_files_do_not_get_the_implicit_base(write_wf, load):
+    # _wf.yml used to be prepended to included files too, pushing workflow
+    # level keys into the including block
+    write_wf('---\ndefaults:\n  inventory: inventory.ini\n', name='_wf.yml')
+    write_wf(INCLUDED_BLOCK, name='_block.yml')
+    loaded = load(write_wf('---\nworkflow:\n  - id: inc\n    include_block: _block.yml\n'))
+
+    assert {'i1', 'i2'} <= set(loaded.get_nodes())
+
+
+def test_the_rendered_workflow_shows_the_merged_document(write_wf, load, log_dir):
+    write_wf('---\ndefaults:\n  inventory: inventory.ini\n  limit: from_base\n', name='base.yml')
+    load(write_wf('---\nmeta:\n  extends: base.yml\n' + ONE_NODE))
+
+    rendered = yaml.safe_load(open(os.path.join(log_dir, 'rendered_workflow.yml')))
+    assert rendered['defaults']['limit'] == 'from_base'
+    assert 'extends' not in rendered.get('meta', {})
 
 
 def test_rendered_workflow_is_written_to_the_log_directory(write_wf, load, log_dir):

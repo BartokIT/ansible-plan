@@ -11,7 +11,8 @@ import copy
 import yaml
 import jsonschema
 from ansible.plugins.filter.core import FilterModule
-from .exceptions import (AnsibleWorkflowConfigurationError, AnsibleWorkflowImportMissingBlock, AnsibleWorkflowRecursiveImport,
+from .exceptions import (AnsibleWorkflowConfigurationError, AnsibleWorkflowImportMissingBlock, AnsibleWorkflowLoadingError,
+                         AnsibleWorkflowRecursiveImport,
                          AnsibleWorkflowUnsupportedVersion, AnsibleWorkflowValidationError,
                          AnsibleWorkflowVaultScriptNotExists,
                          AnsibleWorkflowVaultScriptNotSet, AnsibleWorkflowYAMLNotValid)
@@ -44,6 +45,9 @@ class WorkflowYamlLoader(WorkflowLoader):
     Handles loading of a workflow from a yml file with directives that mimics
     Ansible task names.
     '''
+    #: A file with this name beside a workflow is its base, unless the
+    #: workflow names one with meta.extends
+    IMPLICIT_BASE_NAME = '_wf.yml'
 
     def __init__(self, workflow_file: str, logging_dir: str,
                  logging_level: str = 'error', input_templating: dict = {},
@@ -72,10 +76,10 @@ class WorkflowYamlLoader(WorkflowLoader):
         self._template_env.filters.update(FilterModule().filters())
         # contains the dictionary parsed from the yaml workflow file
         try:
-            self.__yaml_parsed: dict = self._load_yaml(self.get_contents(self.__workflow_file))
-        except yaml.scanner.ScannerError as yerr:
-            self._logger.exception("Errors in YAML file format. %s" % yerr)
-            raise AnsibleWorkflowYAMLNotValid(yerr.message)
+            self.__yaml_parsed: dict = self._load_workflow(self.__workflow_file)
+        except AnsibleWorkflowLoadingError as err:
+            self._logger.error("Impossible to load workflow file. %s" % err)
+            raise
         except Exception as err:
             self._logger.error("Impossible to load workflow file. %s" % err)
             raise AnsibleWorkflowYAMLNotValid(err)
@@ -143,22 +147,102 @@ class WorkflowYamlLoader(WorkflowLoader):
             if not os.path.exists(path):
                 raise AnsibleWorkflowConfigurationError('Specified workflow path does not exist: %s' % path)
 
-            data = ''
-
-            prependwf_file = '{}/_wf.yml'.format(os.path.dirname(os.path.realpath(path)))
-
-            if os.path.exists(prependwf_file):
-                with open(prependwf_file) as f:
-                    data += f.read()
-
             with open(path) as f:
-                data += f.read()
-
-            return data
+                return f.read()
 
         except (IOError, OSError) as err:
             self._logger.exception(err)
             raise AnsibleWorkflowConfigurationError('Error trying to load workflow file contents: %s' % err)
+
+    def _load_workflow(self, path: str, extended_by: typing.List[str] = None):
+        '''
+        Load a workflow file merged over the base it extends, if any.
+
+        The base is the file named by meta.extends, relative to the file that
+        declares it. Without that key a _wf.yml beside the top-level workflow
+        file is the base; `extends: null` opts out of it. A base can extend
+        another base, and is merged over it the same way.
+        Args:
+            path (string): The workflow file, or a base file.
+            extended_by (list): Real paths of the files extending this one,
+                outermost first; empty for the top-level workflow file.
+        Returns:
+            The parsed document, merged over its bases.
+        Raises:
+            AnsibleWorkflowYAMLNotValid: If a file is not valid YAML.
+            AnsibleWorkflowRecursiveImport: If a file ends up extending itself.
+            AnsibleWorkflowValidationError: If a base file is not a valid
+                workflow fragment.
+            AnsibleWorkflowConfigurationError: If a base file does not exist.
+        '''
+        chain = (extended_by or []) + [os.path.realpath(path)]
+        try:
+            parsed = self._load_yaml(self.get_contents(path))
+        except yaml.YAMLError as err:
+            raise AnsibleWorkflowYAMLNotValid('%s is not valid YAML: %s' % (path, err))
+
+        if extended_by:
+            if parsed is None:
+                parsed = {}
+            if not isinstance(parsed, Mapping):
+                raise AnsibleWorkflowValidationError('The base workflow file %s must be a mapping' % path)
+        elif not isinstance(parsed, Mapping):
+            # the schema validation reports it, as for any malformed workflow
+            return parsed
+
+        base = self._base_of(path, parsed, is_top_level=not extended_by)
+        if base is None:
+            return parsed
+        if os.path.realpath(base) in chain:
+            raise AnsibleWorkflowRecursiveImport(
+                'The workflow file %s extends itself through %s' % (chain[0], ' -> '.join(chain[1:] + [base])))
+        if not os.path.exists(base):
+            raise AnsibleWorkflowConfigurationError('The base workflow file %s, extended by %s, does not exist' % (base, path))
+
+        base_parsed = self._load_workflow(base, chain)
+        schema_path = os.path.join(os.path.dirname(__file__), '..', 'schemas', 'v1.json')
+        try:
+            validate_workflow(base_parsed, schema_path, partial=True)
+        except jsonschema.ValidationError as err:
+            raise AnsibleWorkflowValidationError('The base workflow file %s is not valid: %s' % (base, err.message))
+
+        self._logger.info("Workflow file %s extends %s" % (path, base))
+        return self._merge_over_base(base_parsed, parsed)
+
+    def _base_of(self, path: str, parsed: dict, is_top_level: bool) -> typing.Optional[str]:
+        '''
+        Tell which file the workflow file at path extends, and drop the
+        meta.extends key: the merged document no longer extends anything.
+        '''
+        meta = parsed.get(YamlKeys.META_KEY.value)
+        directory = os.path.dirname(os.path.abspath(path))
+        if isinstance(meta, Mapping) and 'extends' in meta:
+            base = meta.pop('extends')
+            if base is None:
+                return None
+            if not isinstance(base, str):
+                raise AnsibleWorkflowValidationError('meta.extends in %s must be a file path, got %r' % (path, base))
+            return base if os.path.isabs(base) else os.path.join(directory, base)
+
+        implicit = os.path.join(directory, self.IMPLICIT_BASE_NAME)
+        if is_top_level and os.path.isfile(implicit) and os.path.realpath(implicit) != os.path.realpath(path):
+            return implicit
+        return None
+
+    @classmethod
+    def _merge_over_base(cls, base: dict, override: dict) -> dict:
+        '''
+        Merge a workflow document over its base: mappings are merged key by
+        key, anything else - lists included - is replaced by the overriding
+        value.
+        '''
+        merged = dict(base)
+        for key, value in override.items():
+            if isinstance(value, Mapping) and isinstance(merged.get(key), Mapping):
+                merged[key] = cls._merge_over_base(merged[key], value)
+            else:
+                merged[key] = value
+        return merged
 
     def parse(self, extra_vars: typing.Dict[str, str]) -> AnsibleWorkflow:
         '''

@@ -12,3 +12,4 @@ logs/
 backend_stderr.log
 backend_stdout.log
 examples/args
+CLAUDE.md

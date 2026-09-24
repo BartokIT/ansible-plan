@@ -149,6 +149,7 @@ Here an explaination of the various keys:
 | Name                   | Description                                                                                     |
 | :---                   | :---                                                                                            |
 | meta/format-version    | Specify the workflow YAML format version. Only 1 is supported                                   |
+| meta/extends           | A base workflow file this one is merged over, see [Workflow bases](#workflow-bases)             |
 | templating             | Allow to specify variables to be used inside the values of the workflow using jinja2 template   |
 | options/global_path    | Specify a global path the is prepended to playbooks, project_path, inventory and vault script   |
 | options/vault_script   | Specify a vault script to be used to get vault id passwords                                     |
@@ -393,6 +394,49 @@ workflow:
       - id: sub2b3
         import_playbook: playbooks/third.yml
 ```
+
+### Workflow bases
+Values shared by several workflows - defaults, options, templating variables - can live in a base file that each workflow extends.
+
+Name the base explicitly with `meta.extends`. A relative path is resolved against the directory of the file that declares it:
+
+```yaml
+---
+meta:
+  format-version: 1
+  extends: common/base.yml
+defaults:
+  limit: first_hostname
+workflow:
+  - id: n1
+    import_playbook: playbooks/first.yml
+```
+
+and `common/base.yml`:
+
+```yaml
+---
+defaults:
+  inventory: inventory.ini
+  limit: all
+  vars:
+    shared_var: shared_value
+templating:
+  target: second_hostname
+```
+
+Without `meta.extends`, a file named `_wf.yml` in the same directory as the workflow is used as its base. Set `extends: null` to opt out of it.
+
+How the files are merged:
+
+* mappings are merged key by key and the workflow wins: above, the workflow gets `inventory` and `vars` from the base and keeps its own `limit`;
+* anything else, lists included, is replaced: a `workflow` or `vault_ids` in the workflow replaces the one of the base rather than being appended to it;
+* a base can extend another base with its own `meta.extends`, and is merged over it the same way. The implicit `_wf.yml` applies only to the workflow you run, not to bases nor to files pulled in with `include_block`;
+* a base holds any subset of the workflow keys, and is validated on its own. Errors in it are reported with its path.
+
+Relative paths inside a base (`inventory`, `vault_script`, `global_path`, ...) are resolved as if they were written in the workflow that extends it. When a base is shared by workflows in different directories, prefer absolute paths or `options.global_path`.
+
+The merged document is what gets executed, and it is written to `rendered_workflow.yml` in the log directory.
 
 ### Templating
 If you need to reuse some values inside the workflow content you can also use Jinja templating by using the `templating` root key where you can put variables to be used inside the workflow..

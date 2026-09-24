@@ -1,0 +1,13 @@
+---
+# A base workflow: extended by extends_base.yml through meta.extends.
+# Relative paths below resolve against the directory of the workflow that
+# extends this file, as if they were written there.
+templating:
+  target: first_hostname
+options:
+  vault_script: vault_script_test.py
+defaults:
+  inventory: inventory.ini
+  verbosity: 1
+  vars:
+    from_base: base_value

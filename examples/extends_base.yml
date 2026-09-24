@@ -1,0 +1,16 @@
+---
+meta:
+  format-version: 1
+  extends: _base_defaults.yml
+defaults:
+  # merged key by key with the defaults of the base: inventory and
+  # vars.from_base still come from _base_defaults.yml
+  verbosity: 2
+  vars:
+    from_workflow: workflow_value
+workflow:
+  - id: extended_1
+    import_playbook: playbooks/first.yml
+    limit: "{{ target }}"
+  - id: extended_2
+    import_playbook: playbooks/second.yml
