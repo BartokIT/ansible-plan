@@ -202,7 +202,7 @@ class WorkflowYamlLoader(WorkflowLoader):
         base_parsed = self._load_workflow(base, chain)
         schema_path = os.path.join(os.path.dirname(__file__), '..', 'schemas', 'v1.json')
         try:
-            validate_workflow(base_parsed, schema_path, partial=True)
+            validate_workflow(base_parsed, schema_path, base=True)
         except jsonschema.ValidationError as err:
             raise AnsibleWorkflowValidationError('The base workflow file %s is not valid: %s' % (base, err.message))
 

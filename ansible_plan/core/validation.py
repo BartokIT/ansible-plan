@@ -7,7 +7,7 @@ def validate_workflow(instance, schema_path, base=False):
     Validate a workflow document against the schema of its format version.
 
     Args:
-        partial (bool): The document is a base other workflows extend, so the
+        base (bool): The document is a base other workflows extend, so the
             keys every complete workflow must have are not required.
     '''
     with open(schema_path, 'r') as f:
