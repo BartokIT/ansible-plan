@@ -12,6 +12,10 @@
                 "format-version": {
                     "description": "Specify the format version for the workflow",
                     "type": "integer"
+                },
+                "extends": {
+                    "description": "Base workflow file this one is merged over, relative to this file. null disables the implicit _wf.yml",
+                    "type": ["string", "null"]
                 }
             },
             "additionalProperties": false
